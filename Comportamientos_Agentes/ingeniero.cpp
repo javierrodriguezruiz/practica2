@@ -46,8 +46,73 @@ Action ComportamientoIngeniero::think(Sensores sensores)
 // Niveles iniciales (Comportamientos reactivos simples)
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores)
 {
+  // Llamamos a actualizar mapa
+  ActualizarMapa(sensores);
+
+  // Inicializamos la accion a IDLE 
   Action accion = IDLE;
-  return accion;
+
+  // Obtenemos los datos de los sensores para observar si podemos avanzar
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  // Actualizamos variable tengo_zapatillas
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+  bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(delante, tengo_zapatillas) && !sensores.choque);
+
+  switch(estado_actual){
+
+    case Avanza:
+      if (puedo_avanzar){
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        estado_actual = Gira;
+
+        // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
+        // manera aleatoria para no entrar en bucles 
+        if (rand() % 2 == 0){
+          girar_derecha = true;
+          accion = TURN_SR;
+        }else{
+          girar_derecha = false;
+          accion = TURN_SL;
+        }
+
+        giros_consecutivos++;
+      }
+      
+      break;
+
+    case Gira:
+      if (puedo_avanzar){ // Si encontramos un camino para avanzar
+        estado_actual = Avanza;
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        // Seguimos girando en la misma dir hasta encontrar un hueco o giros_consecutivos==()
+        if (girar_derecha)
+          accion = TURN_SR;
+        else
+          accion = TURN_SL;
+
+        giros_consecutivos++;
+      }
+      break;
+  }
+
+
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, estamos encerrados
+  if (giros_consecutivos >= 8)
+    accion =  IDLE; 
+
+  // guardamos la accion en ultima_accion
+  ultima_accion = accion;
+  
+  return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 
 /**

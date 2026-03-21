@@ -22,6 +22,11 @@ public:
    */
   ComportamientoIngeniero(unsigned int size = 0) : Comportamiento(size) {
     // Inicializar Variables de Estado
+    tengo_zapatillas = false;
+    ultima_accion = IDLE;
+    giros_consecutivos = 0;
+    estado_actual = Avanza; // Por defecto Avanza 
+    girar_derecha = true;
   }
 
   /**
@@ -33,7 +38,13 @@ public:
                          std::vector<std::vector<unsigned char>> mapaC): 
                          Comportamiento(mapaR, mapaC) {
     // Inicializar Variables de Estado
+    tengo_zapatillas = false;
+    ultima_accion = IDLE;
+    giros_consecutivos = 0;
+    estado_actual = Avanza; // Por defecto Avanza 
+    girar_derecha = true;
   }
+  
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
       : Comportamiento(comport) {}
@@ -182,6 +193,17 @@ private:
   // =========================================================================
   // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
   // =========================================================================
+
+  bool tengo_zapatillas; 
+  Action ultima_accion;
+  int giros_consecutivos; // Para evitar bucles girando, si == 4, vuelta completa, buscamos otra alternativa
+
+  enum Estado{Avanza, Gira}; 
+  // Si esta en Avanza, caminará al frente hasta encontrar un muro, si esta en Gira, entonces si encontramos un camino al girar avanzamos y si no seguimos girando 
+  Estado estado_actual;
+  
+  // Variable que nos indica si giramos a la derecha o no para evitar bucles infinitos. Se decidirá en el futuro de forma aleatoria con rand.
+  bool girar_derecha;  
 
 };
 
