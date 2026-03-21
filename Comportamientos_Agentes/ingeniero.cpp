@@ -56,6 +56,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
 
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  if (sensores.superficie[0] == 'U') {
+    ultima_accion = IDLE;
+    return IDLE; 
+  }
+
   // Actualizamos variable tengo_zapatillas
   if (sensores.superficie[0] == 'D') {
     tengo_zapatillas = true;
