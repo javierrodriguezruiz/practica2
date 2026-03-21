@@ -31,9 +31,102 @@ Action ComportamientoTecnico::think(Sensores sensores) {
 
 // Niveles del técnico
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
+  // Llamamos a actualizar mapa
+  ActualizarMapa(sensores);
+
+  // Inicializamos la accion a IDLE 
   Action accion = IDLE;
 
-  return accion;
+  // Obtenemos los datos de los sensores para observar si podemos avanzar
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  if (sensores.superficie[0] == 'U') {
+    ultima_accion = IDLE;
+    return IDLE; 
+  }
+
+  // Actualizamos variable tengo_zapatillas
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+    // Comprobamos si la casilla buscada está en nuestra visión 
+  if (sensores.superficie[2] == 'U'){
+    estado_actual = Avanza;
+    giros_consecutivos = 0;
+    ultima_accion = WALK;
+    return WALK;
+  } // si está en frente
+
+  if (sensores.superficie[1] == 'U'){
+    estado_actual = Gira;
+    giros_consecutivos = 1;
+    ultima_accion = TURN_SL;
+    return TURN_SL;
+  } // si está en la diagonal izquierda
+
+  if (sensores.superficie[3] == 'U'){
+    estado_actual = Gira;
+    giros_consecutivos = 1;
+    ultima_accion = TURN_SR;
+    return TURN_SR;
+  } // si está en la diagonal derecha
+
+
+  bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
+
+  switch(estado_actual){
+
+    case Avanza:
+      if (puedo_avanzar){
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        estado_actual = Gira;
+
+        // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
+        // manera aleatoria para no entrar en bucles 
+        if (rand() % 2 == 0){
+          girar_derecha = true;
+          accion = TURN_SR;
+        }else{
+          girar_derecha = false;
+          accion = TURN_SL;
+        }
+
+        giros_consecutivos++;
+      }
+      
+      break;
+
+    case Gira:
+      if (puedo_avanzar){ // Si encontramos un camino para avanzar
+        estado_actual = Avanza;
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        // Seguimos girando en la misma dir hasta encontrar un hueco o giros_consecutivos==()
+        if (girar_derecha)
+          accion = TURN_SR;
+        else
+          accion = TURN_SL;
+
+        giros_consecutivos++;
+      }
+      break;
+  }
+
+
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, estamos encerrados
+  if (giros_consecutivos >= 8)
+    accion =  IDLE; 
+
+  // guardamos la accion en ultima_accion
+  ultima_accion = accion;
+  
+  return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 
 /**
@@ -42,7 +135,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
  * @return true si es camino ('C'), zapatillas ('D') o meta ('U').
  */
 bool ComportamientoTecnico::es_camino(unsigned char c) const {
-  return (c == 'C' || c == 'D' || c == 'U');
+  return (c == 'C' || c == 'D' || c == 'U' || c == 'S');
 }
 
 
@@ -287,8 +380,11 @@ void ComportamientoTecnico::ActualizarMapa(Sensores sensores) {
  * @return true si la casilla es transitable.
  */
 bool ComportamientoTecnico::EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas) {
-  if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size()) return false;
-  return es_camino(mapaResultado[f][c]);  // Solo 'C', 'S', 'D', 'U' son transitables en Nivel 0
+  if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size()) 
+    return false;
+
+  return es_camino(mapaResultado[f][c]) || (mapaResultado[f][c] == 'B' && tieneZapatillas);  
+  // Solo 'C', 'S', 'D', 'U' son transitables en Nivel 0
 }
 
 /**

@@ -67,6 +67,30 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     tengo_zapatillas = true;
   }
 
+  // Comprobamos si la casilla buscada está en nuestra visión 
+  if (sensores.superficie[2] == 'U'){
+    estado_actual = Avanza;
+    giros_consecutivos = 0;
+    ultima_accion = WALK;
+    return WALK;
+  } // si está en frente
+
+  if (sensores.superficie[1] == 'U'){
+    estado_actual = Gira;
+    giros_consecutivos = 1;
+    ultima_accion = TURN_SL;
+    return TURN_SL;
+  } // si está en la diagonal izquierda
+
+  if (sensores.superficie[3] == 'U'){
+    estado_actual = Gira;
+    giros_consecutivos = 1;
+    ultima_accion = TURN_SR;
+    return TURN_SR;
+  } // si está en la diagonal derecha
+
+  
+
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(delante, tengo_zapatillas) && !sensores.choque);
 
   switch(estado_actual){
