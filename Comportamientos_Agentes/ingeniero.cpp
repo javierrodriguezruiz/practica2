@@ -46,52 +46,69 @@ Action ComportamientoIngeniero::think(Sensores sensores)
 // Niveles iniciales (Comportamientos reactivos simples)
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores)
 {
-  // Llamamos a actualizar mapa
+  // Actualizamos el mapa y el estado del juego
   ActualizarMapa(sensores);
-
-  // Inicializamos la accion a IDLE 
-  Action accion = IDLE;
 
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
-
-  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
-  if (sensores.superficie[0] == 'U') {
-    ultima_accion = IDLE;
-    return IDLE; 
-  }
 
   // Actualizamos variable tengo_zapatillas
   if (sensores.superficie[0] == 'D') {
     tengo_zapatillas = true;
   }
 
-  // Comprobamos si la casilla buscada está en nuestra visión 
-  if (sensores.superficie[2] == 'U'){
-    estado_actual = Avanza;
-    giros_consecutivos = 0;
-    ultima_accion = WALK;
-    return WALK;
-  } // si está en frente
 
-  if (sensores.superficie[1] == 'U'){
-    estado_actual = Gira;
-    giros_consecutivos = 1;
-    ultima_accion = TURN_SL;
-    return TURN_SL;
-  } // si está en la diagonal izquierda
-
-  if (sensores.superficie[3] == 'U'){
-    estado_actual = Gira;
-    giros_consecutivos = 1;
-    ultima_accion = TURN_SR;
-    return TURN_SR;
-  } // si está en la diagonal derecha
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  if (sensores.superficie[0] == 'U') {
+    last_action = IDLE;
+    return IDLE; 
+  }
 
   
+  // BUSQUEDA DE CASILLAS OBJETIVO:
+  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0], tengo_zapatillas);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0], tengo_zapatillas);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
 
-  bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(delante, tengo_zapatillas) && !sensores.choque);
+  // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
+  if (sensores.agentes[1] == 'a') i = 'P';
+  if (sensores.agentes[2] == 'a') c = 'P';
+  if (sensores.agentes[3] == 'a') d = 'P';
+
+  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
+  int pos = VeoCasillaInteresante(i, c, d, tengo_zapatillas);
+
+  if (pos == 2){
+    estado_actual = Avanza;
+    giros_consecutivos = 0;
+    last_action = WALK;
+    return WALK;
+  }else if (pos == 1){
+    estado_actual = Gira;
+    giros_consecutivos = 0;
+    last_action = TURN_SL;
+    return TURN_SL;
+  }else if (pos == 3){
+    estado_actual = Gira;
+    giros_consecutivos = 0;
+    last_action = TURN_SR;
+    return TURN_SR;
+  }
+  
+  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
+  // Pasamos a explorar:
+
+  // Inicializamos la accion a IDLE 
+  Action accion = IDLE;
+
+  bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
+
+  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
+  if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
+      puedo_avanzar = false; 
+  }
 
   switch(estado_actual){
 
@@ -104,17 +121,11 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
         // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
         // manera aleatoria para no entrar en bucles 
-        if (rand() % 2 == 0){
-          girar_derecha = true;
-          accion = TURN_SR;
-        }else{
-          girar_derecha = false;
-          accion = TURN_SL;
-        }
+        girar_derecha = (rand()%2 == 0);
+        accion = girar_derecha ? TURN_SR : TURN_SL;
 
         giros_consecutivos++;
       }
-      
       break;
 
     case Gira:
@@ -123,7 +134,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
         accion = WALK;
         giros_consecutivos = 0;
       }else{
-        // Seguimos girando en la misma dir hasta encontrar un hueco o giros_consecutivos==()
+        // Seguimos girando en la misma direccion
         if (girar_derecha)
           accion = TURN_SR;
         else
@@ -135,12 +146,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   }
 
 
-  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, estamos encerrados
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
 
   // guardamos la accion en ultima_accion
-  ultima_accion = accion;
+  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
@@ -216,6 +227,51 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores)
 {
   return IDLE;
+}
+
+
+/**
+ * @brief Determina si casilla viable por altura
+ * @param casilla    tipo de terreno
+ * @param dif  diferencia de altura entre casillas
+ * @param zap indica si tenemos o no las zapatillas
+ * @return 'P' si no es accesible por altura y casilla en otro caso
+ */
+char ComportamientoIngeniero::ViablePorAltura (char casilla, int dif, bool zap){
+  // Si el desnivel es <= 1, o si tengo zapatillas y es <= 2, puedo pasar
+  if (abs(dif) <= 1 || (zap && abs(dif) <= 2)) {
+    return casilla;
+  } else {
+    return 'P'; // Si no puedo pasar, simulamos que es un Precipicio
+  }
+}
+
+/** @brief Determina la mejor opcion entre las 3 casillas que tiene delante
+ * @param i    terreno que hay en la pos 1 (45izq)
+ * @param c  terreno que hay en la pos 2 (delante)
+ * @param d terreno que hay en la pos 3 (45derecha)
+ * @param zap indica si tenemos o no las zapatillas
+ * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
+ */
+int ComportamientoIngeniero::VeoCasillaInteresante(char i, char c, char d, bool zap){
+  // Buscamos si la meta se encuentra alrededor nuestra
+  if (c == 'U') return 2; // en frente
+  else if (i == 'U') return 1; // izquierda
+  else if (d == 'U') return 3; // derecha
+
+  // Buscamos ahora las zapatillas, solo en caso de NO tenerlas ya
+  if (!zap) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Buscamos en ultimo lugar casillas de tipo camino
+  if (c == 'C') return 2;
+  else if (i == 'C') return 1;
+  else if (d == 'C') return 3;
+
+  return 0; // Si no hay nada, decide nuestro agente
 }
 
 // =========================================================================

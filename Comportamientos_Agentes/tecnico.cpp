@@ -31,49 +31,57 @@ Action ComportamientoTecnico::think(Sensores sensores) {
 
 // Niveles del técnico
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
-  // Llamamos a actualizar mapa
+  // Actualizamos el mapa y el estado del juego
   ActualizarMapa(sensores);
-
-  // Inicializamos la accion a IDLE 
-  Action accion = IDLE;
 
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
-
-  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
-  if (sensores.superficie[0] == 'U') {
-    ultima_accion = IDLE;
-    return IDLE; 
-  }
 
   // Actualizamos variable tengo_zapatillas
   if (sensores.superficie[0] == 'D') {
     tengo_zapatillas = true;
   }
 
-    // Comprobamos si la casilla buscada está en nuestra visión 
-  if (sensores.superficie[2] == 'U'){
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  if (sensores.superficie[0] == 'U') {
+    last_action = IDLE;
+    return IDLE; 
+  }
+
+
+  // BUSQUEDA DE CASILLAS OBJETIVO:
+  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
+
+  
+  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
+  int pos = VeoCasillaInteresante(i, c, d);
+  
+  if (pos == 2){
     estado_actual = Avanza;
     giros_consecutivos = 0;
-    ultima_accion = WALK;
+    last_action = WALK;
     return WALK;
-  } // si está en frente
-
-  if (sensores.superficie[1] == 'U'){
+  }else if (pos == 1){
     estado_actual = Gira;
-    giros_consecutivos = 1;
-    ultima_accion = TURN_SL;
+    giros_consecutivos = 0;
+    last_action = TURN_SL;
     return TURN_SL;
-  } // si está en la diagonal izquierda
-
-  if (sensores.superficie[3] == 'U'){
+  }else if (pos == 3){
     estado_actual = Gira;
-    giros_consecutivos = 1;
-    ultima_accion = TURN_SR;
+    giros_consecutivos = 0;
+    last_action = TURN_SR;
     return TURN_SR;
-  } // si está en la diagonal derecha
+  }
 
+  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
+  // Pasamos a explorar:
+
+  // Inicializamos la accion a IDLE 
+  Action accion = IDLE;
 
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
 
@@ -88,17 +96,11 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
         // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
         // manera aleatoria para no entrar en bucles 
-        if (rand() % 2 == 0){
-          girar_derecha = true;
-          accion = TURN_SR;
-        }else{
-          girar_derecha = false;
-          accion = TURN_SL;
-        }
+        girar_derecha = (rand()%2 == 0);
+        accion = girar_derecha ? TURN_SR : TURN_SL;
 
         giros_consecutivos++;
       }
-      
       break;
 
     case Gira:
@@ -107,7 +109,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
         accion = WALK;
         giros_consecutivos = 0;
       }else{
-        // Seguimos girando en la misma dir hasta encontrar un hueco o giros_consecutivos==()
+        // Seguimos girando en la misma direccion
         if (girar_derecha)
           accion = TURN_SR;
         else
@@ -119,12 +121,12 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   }
 
 
-  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, estamos encerrados
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
 
   // guardamos la accion en ultima_accion
-  ultima_accion = accion;
+  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
@@ -193,7 +195,35 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
   return IDLE;
 }
 
+char ComportamientoTecnico::ViablePorAltura(char casilla, int dif) {
+  // El técnico solo puede superar desniveles de 1, sin importar los objetos
+  if (abs(dif) <= 1) {
+    return casilla;
+  } else {
+    return 'P';
+  }
+}
 
+int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d) {
+  // Buscamos la meta
+  if (c == 'U') return 2;
+  else if (i == 'U') return 1;
+  else if (d == 'U') return 3;
+
+  // Buscamos las zapatillas si no las tenemos aun 
+  if (!tengo_zapatillas) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Buscamos casilla transitable
+  if (c == 'C' || c == 'S' || (c == 'B' && tengo_zapatillas)) return 2;
+  else if (i == 'C' || i == 'S' || (i == 'B' && tengo_zapatillas)) return 1;
+  else if (d == 'C' || d == 'S' || (d == 'B' && tengo_zapatillas)) return 3;
+
+  return 0;
+}
 
 
 // =========================================================================

@@ -23,7 +23,7 @@ public:
   ComportamientoIngeniero(unsigned int size = 0) : Comportamiento(size) {
     // Inicializar Variables de Estado
     tengo_zapatillas = false;
-    ultima_accion = IDLE;
+    last_action = IDLE;
     giros_consecutivos = 0;
     estado_actual = Avanza; // Por defecto Avanza 
     girar_derecha = true;
@@ -37,12 +37,6 @@ public:
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR, 
                          std::vector<std::vector<unsigned char>> mapaC): 
                          Comportamiento(mapaR, mapaC) {
-    // Inicializar Variables de Estado
-    tengo_zapatillas = false;
-    ultima_accion = IDLE;
-    giros_consecutivos = 0;
-    estado_actual = Avanza; // Por defecto Avanza 
-    girar_derecha = true;
   }
   
 
@@ -187,6 +181,25 @@ protected:
  */
   void VisualizaRedTuberias(const list<Paso> &plan);
 
+  /**
+ * @brief Determina si casilla viable por altura
+ * @param casilla    tipo de terreno
+ * @param dif  diferencia de altura entre casillas
+ * @param zap indica si tenemos o no las zapatillas
+ * @return 'P' si no es accesible por altura y casilla en otro caso
+ */
+  char ViablePorAltura (char casilla, int dif, bool zap);
+
+  /**
+ * @brief Determina la mejor opcion entre las 3 casillas que tiene delante
+ * @param i    terreno que hay en la pos 1 (45izq)
+ * @param c  terreno que hay en la pos 2 (delante)
+ * @param d terreno que hay en la pos 3 (45derecha)
+ * @param zap indica si tenemos o no las zapatillas
+ * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
+ */
+  int VeoCasillaInteresante(char i, char c, char d, bool zap);
+
 
 
 private:
@@ -195,7 +208,7 @@ private:
   // =========================================================================
 
   bool tengo_zapatillas; 
-  Action ultima_accion;
+  Action last_action;
   int giros_consecutivos; // Para evitar bucles girando, si == 4, vuelta completa, buscamos otra alternativa
 
   enum Estado{Avanza, Gira}; 
