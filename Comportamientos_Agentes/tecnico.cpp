@@ -38,7 +38,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
 
-  // Actualizamos variable tengo_zapatillas
+  // Actualizamos variable tengo_zapatillas (Aunque irrelevanta para tecnico en este nivel)
   if (sensores.superficie[0] == 'D') {
     tengo_zapatillas = true;
   }
