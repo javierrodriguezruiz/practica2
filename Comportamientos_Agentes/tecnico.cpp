@@ -140,6 +140,12 @@ bool ComportamientoTecnico::es_camino(unsigned char c) const {
   return (c == 'C' || c == 'D' || c == 'U' || c == 'S');
 }
 
+bool ComportamientoTecnico::es_caminoNivel1(unsigned char c) const {
+  return (c == 'C' || c == 'D' || c == 'S');
+}
+
+
+
 
 /**
  * @brief Comportamiento reactivo del técnico para el Nivel 1.
@@ -147,7 +153,103 @@ bool ComportamientoTecnico::es_camino(unsigned char c) const {
  * @return Acción a realizar.
  */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
-  return IDLE;
+  // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
+  // pasamos por T. Residuos.
+
+  // Actualizamos el mapa y el estado del juego
+  ActualizarMapa(sensores);
+
+  // Obtenemos los datos de los sensores para observar si podemos avanzar
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  // Actualizamos variable tengo_zapatillas
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+  // Condicion de parada en T. Residuos eliminada
+
+  
+  // BUSQUEDA DE CASILLAS OBJETIVO:
+  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
+
+  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
+  int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas);
+
+  if (pos == 2){
+    estado_actual = Avanza;
+    giros_consecutivos = 0;
+    last_action = WALK;
+    return WALK;
+  }else if (pos == 1){
+    estado_actual = Gira;
+    giros_consecutivos = 0;
+    last_action = TURN_SL;
+    return TURN_SL;
+  }else if (pos == 3){
+    estado_actual = Gira;
+    giros_consecutivos = 0;
+    last_action = TURN_SR;
+    return TURN_SR;
+  }
+  
+  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
+  // Pasamos a explorar:
+
+  // Inicializamos la accion a IDLE 
+  Action accion = IDLE;
+
+  bool puedo_avanzar = (EsCasillaTransitableLevel1(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
+  
+
+  switch(estado_actual){
+
+    case Avanza:
+      if (puedo_avanzar){
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        estado_actual = Gira;
+
+        // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
+        // manera aleatoria para no entrar en bucles 
+        girar_derecha = (rand()%2 == 0);
+        accion = girar_derecha ? TURN_SR : TURN_SL;
+
+        giros_consecutivos++;
+      }
+      break;
+
+    case Gira:
+      if (puedo_avanzar){ // Si encontramos un camino para avanzar
+        estado_actual = Avanza;
+        accion = WALK;
+        giros_consecutivos = 0;
+      }else{
+        // Seguimos girando en la misma direccion
+        if (girar_derecha)
+          accion = TURN_SR;
+        else
+          accion = TURN_SL;
+
+        giros_consecutivos++;
+      }
+      break;
+  }
+
+
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
+  if (giros_consecutivos >= 8)
+    accion =  IDLE; 
+
+  // guardamos la accion en ultima_accion
+  last_action = accion;
+  
+  return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 
 /**
@@ -221,6 +323,23 @@ int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d) {
   if (c == 'C' || c == 'S' || (c == 'B' && tengo_zapatillas)) return 2;
   else if (i == 'C' || i == 'S' || (i == 'B' && tengo_zapatillas)) return 1;
   else if (d == 'C' || d == 'S' || (d == 'B' && tengo_zapatillas)) return 3;
+
+  return 0;
+}
+
+int ComportamientoTecnico::VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap) {
+
+  // Buscamos las zapatillas si no las tenemos aun 
+  if (!tengo_zapatillas) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Buscamos casillas de tipo camino y sendero (objetivo Nivel 1)
+  if (c == 'C' || c == 'S' || (c == 'B' && zap)) return 2;
+  else if (i == 'C' || i == 'S' || (i == 'B' && zap)) return 1;
+  else if (d == 'C' || d == 'S' || (d == 'B' && zap)) return 3;
 
   return 0;
 }
@@ -415,6 +534,14 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel0(int f, int c, bool tieneZ
 
   return es_camino(mapaResultado[f][c]) || (mapaResultado[f][c] == 'B' && tieneZapatillas);  
   // Solo 'C', 'S', 'D', 'U' son transitables en Nivel 0
+}
+
+bool ComportamientoTecnico::EsCasillaTransitableLevel1(int f, int c, bool tieneZapatillas) {
+  if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size()) 
+    return false;
+
+  return es_caminoNivel1(mapaResultado[f][c]) || (mapaResultado[f][c] == 'B' && tieneZapatillas);  
+  // Solo 'C', 'S', 'D' son transitables en Nivel 1
 }
 
 /**

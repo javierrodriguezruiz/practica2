@@ -6,7 +6,7 @@
 
 # Variables configurables
 CARPETA_MAPAS="mapas"
-NIVEL=0
+NIVEL=1
 SEMILLA=42
 TIEMPO_ESPERA=5 # Segundos a esperar entre cada mapa
 

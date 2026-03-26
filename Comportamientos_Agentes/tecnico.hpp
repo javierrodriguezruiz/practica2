@@ -147,6 +147,8 @@ protected:
    * @return true si la casilla es transitable.
    */
   bool EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas);
+  bool EsCasillaTransitableLevel1(int f, int c, bool tieneZapatillas);
+
 
   /**
    * @brief Comprueba si la casilla de delante es accesible por diferencia de altura.
@@ -169,6 +171,8 @@ protected:
    * @return true si es camino ('C'), zapatillas ('D') o meta ('U').
    */
   bool es_camino(unsigned char c) const;
+  bool es_caminoNivel1(unsigned char c) const;
+
 
     /**
  * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
@@ -208,6 +212,8 @@ protected:
  * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
  */
   int VeoCasillaInteresante(char i, char c, char d);
+
+  int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap);
 
 private:
   // =========================================================================
