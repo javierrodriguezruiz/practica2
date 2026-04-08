@@ -3,6 +3,7 @@
 #include <iostream>
 #include <queue>
 #include <set>
+#include <climits>
 
 using namespace std;
 
@@ -31,8 +32,17 @@ Action ComportamientoTecnico::think(Sensores sensores) {
 
 // Niveles del técnico
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
-  // Actualizamos el mapa y el estado del juego
-  ActualizarMapa(sensores);
+  
+  // Inicializamos la matriz de mapas visitados
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
+
+  // actualizamos el mapa y la matriz de casillas visitadas
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
 
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
@@ -45,7 +55,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
   // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
   if (sensores.superficie[0] == 'U') {
-    last_action = IDLE;
     return IDLE; 
   }
 
@@ -58,24 +67,38 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
   
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresante(i, c, d);
+  // Dentro del metodo usamos memoria de casillas visitadas para explorar nuevas casillas
+  int pos = VeoCasillaInteresante(i, c, d, actual);
   
   if (pos == 2){
-    estado_actual = Avanza;
     giros_consecutivos = 0;
-    last_action = WALK;
     return WALK;
   }else if (pos == 1){
-    estado_actual = Gira;
     giros_consecutivos = 0;
-    last_action = TURN_SL;
     return TURN_SL;
   }else if (pos == 3){
-    estado_actual = Gira;
     giros_consecutivos = 0;
-    last_action = TURN_SR;
     return TURN_SR;
   }
+
+  
+  // Añado aquí lo de que si la veo voy hacia ella ?
+  // Analizamos TODA LA VISIÓN del agente por si 'U' estuviera en alguna casilla a la vista
+  // salvo las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
+  // Casillas del frente (si lo vemos en frente y la casilla de delante es camino)
+  if ((sensores.superficie[2] == 'U' || sensores.superficie[6] == 'U' || sensores.superficie[12] == 'U') && (es_camino(c) || (c == 'B' && tengo_zapatillas)))
+    return WALK;
+  
+  // Casillas de la izquierda
+  // Si lo vemos a la izquierda y la casilla 1 es camino
+  if ((sensores.superficie[4] == 'U' || sensores.superficie[5] == 'U' || sensores.superficie[9] == 'U' || sensores.superficie[10] == 'U' || sensores.superficie[11] == 'U') && (es_camino(i) || (i == 'B' && tengo_zapatillas)))
+    return TURN_SL;
+
+  // Casillas de la derecha
+  // Si lo vemos a la derecha y la casilla 3 es camino (a la que nos dirigimos)
+  if ((sensores.superficie[7] == 'U' || sensores.superficie[8] == 'U' || sensores.superficie[13] == 'U' || sensores.superficie[14] == 'U' || sensores.superficie[15] == 'U') && (es_camino(d) || (d == 'B' && tengo_zapatillas)))
+    return TURN_SR;
+  
 
   // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
   // Pasamos a explorar:
@@ -85,48 +108,59 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
 
-  switch(estado_actual){
+  // Comentar algo mejor
+  
+  if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
 
-    case Avanza:
-      if (puedo_avanzar){
-        accion = WALK;
-        giros_consecutivos = 0;
-      }else{
-        estado_actual = Gira;
+    // Vemos que casilla ha sido menos visitada si la izq o la derecha
+    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
+      accion = last_action; // entonces realizamos el mismo giro que hicimos
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      // observamos a la derecha y a la izquierda (90 grados)
+      int visitas_i = INT_MAX;
+      int visitas_d = INT_MAX;
 
-        // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
-        // manera aleatoria para no entrar en bucles 
-        girar_derecha = (rand()%2 == 0);
-        accion = girar_derecha ? TURN_SR : TURN_SL;
+      // obtenemos ubicacion de casilla derecha e izquierda (90º)
+        ubicacion izq = actual;
+        izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+        ubicacion casilla_i = Delante(izq);
 
-        giros_consecutivos++;
+        ubicacion der = actual;
+        der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+        ubicacion casilla_d = Delante(der);
+
+
+      if (EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_i)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
       }
-      break;
 
-    case Gira:
-      if (puedo_avanzar){ // Si encontramos un camino para avanzar
-        estado_actual = Avanza;
-        accion = WALK;
-        giros_consecutivos = 0;
-      }else{
-        // Seguimos girando en la misma direccion
-        if (girar_derecha)
-          accion = TURN_SR;
-        else
-          accion = TURN_SL;
+      if (EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_d)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
 
-        giros_consecutivos++;
       }
-      break;
+
+      if (visitas_d <= visitas_i)
+        accion = TURN_SR;
+      else
+        accion = TURN_SL;
+        
+      last_action = accion;
+    }
+
   }
 
 
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
-
-  // guardamos la accion en ultima_accion
-  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
@@ -156,8 +190,16 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
   // pasamos por T. Residuos.
 
-  // Actualizamos el mapa y el estado del juego
-  ActualizarMapa(sensores);
+  // Inicializamos la matriz de mapas visitados
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
+
+  // actualizamos el mapa y la matriz de casillas visitadas
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
 
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
@@ -178,22 +220,16 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas);
+  int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas, actual);
 
   if (pos == 2){
-    estado_actual = Avanza;
     giros_consecutivos = 0;
-    last_action = WALK;
     return WALK;
   }else if (pos == 1){
-    estado_actual = Gira;
     giros_consecutivos = 0;
-    last_action = TURN_SL;
     return TURN_SL;
   }else if (pos == 3){
-    estado_actual = Gira;
     giros_consecutivos = 0;
-    last_action = TURN_SR;
     return TURN_SR;
   }
   
@@ -206,39 +242,53 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   bool puedo_avanzar = (EsCasillaTransitableLevel1(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
   
 
-  switch(estado_actual){
+  // Comentar algo mejor
+  
+  if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
 
-    case Avanza:
-      if (puedo_avanzar){
-        accion = WALK;
-        giros_consecutivos = 0;
-      }else{
-        estado_actual = Gira;
+    // Vemos que casilla ha sido menos visitada si la izq o la derecha
+    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
+      accion = last_action; // entonces realizamos el mismo giro que hicimos
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      // observamos a la derecha y a la izquierda (90 grados)
+      int visitas_i = INT_MAX;
+      int visitas_d = INT_MAX;
 
-        // Calculamos que giro vamos a realizar la proxima vez que choquemos de 
-        // manera aleatoria para no entrar en bucles 
-        girar_derecha = (rand()%2 == 0);
-        accion = girar_derecha ? TURN_SR : TURN_SL;
+      // obtenemos ubicacion de casilla derecha e izquierda (90º)
+        ubicacion izq = actual;
+        izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+        ubicacion casilla_i = Delante(izq);
 
-        giros_consecutivos++;
+        ubicacion der = actual;
+        der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+        ubicacion casilla_d = Delante(der);
+
+
+      if (EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
       }
-      break;
 
-    case Gira:
-      if (puedo_avanzar){ // Si encontramos un camino para avanzar
-        estado_actual = Avanza;
-        accion = WALK;
-        giros_consecutivos = 0;
-      }else{
-        // Seguimos girando en la misma direccion
-        if (girar_derecha)
-          accion = TURN_SR;
-        else
-          accion = TURN_SL;
+      if (EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
 
-        giros_consecutivos++;
       }
-      break;
+
+      if (visitas_d <= visitas_i)
+        accion = TURN_SR;
+      else
+        accion = TURN_SL;
+        
+      last_action = accion;
+    }
+
   }
 
 
@@ -246,11 +296,10 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
 
-  // guardamos la accion en ultima_accion
-  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
+
 
 /**
  * @brief Comportamiento del técnico para el Nivel 2.
@@ -306,7 +355,7 @@ char ComportamientoTecnico::ViablePorAltura(char casilla, int dif) {
   }
 }
 
-int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d) {
+int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d, ubicacion actual) {
   // Buscamos la meta
   if (c == 'U') return 2;
   else if (i == 'U') return 1;
@@ -319,15 +368,55 @@ int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d) {
     else if (d == 'D') return 3;
   }
 
-  // Buscamos casilla transitable
-  if (c == 'C' || c == 'S' || (c == 'B' && tengo_zapatillas)) return 2;
-  else if (i == 'C' || i == 'S' || (i == 'B' && tengo_zapatillas)) return 1;
-  else if (d == 'C' || d == 'S' || (d == 'B' && tengo_zapatillas)) return 3;
+    // Buscamos casillas de tipo camino o sendero (en este nivel no tenemos en cuenta energía)
+  // Pero además iremos a la casilla que haya sido visitada menos veces
 
-  return 0;
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // Procedemos a buscar el minimo de visitas
+  // Inicializamos al maximo
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // Si estan en los rangos adecuados entonces accedemos y le asignamos su valor correspondiente
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+    
+  // elegimos la casilla menos visitada siempre que sea camino y sendero
+
+  int mejor_opcion = 0;  // en caso de que no encuentre nada, decide el agente
+  int menor = INT_MAX;
+
+  if (c != 'P' && EsCasillaTransitableLevel0(casilla_c.f, casilla_c.c,tengo_zapatillas) && visitas_c < menor) {
+    menor = visitas_c;
+    mejor_opcion = 2; // WALK
+  }
+  if (i != 'P' && EsCasillaTransitableLevel0(casilla_i.f, casilla_i.c,tengo_zapatillas) && visitas_i < menor) {
+    menor = visitas_i;
+    mejor_opcion = 1; // Giramos a izquierda
+  }
+  if (d != 'P' && EsCasillaTransitableLevel0(casilla_d.f, casilla_d.c,tengo_zapatillas) && visitas_d < menor) {
+    menor = visitas_d;
+    mejor_opcion = 3; // Giramos a derecha
+  }
+
+  return mejor_opcion; 
 }
 
-int ComportamientoTecnico::VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap) {
+int ComportamientoTecnico::VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual) {
 
   // Buscamos las zapatillas si no las tenemos aun 
   if (!tengo_zapatillas) {
@@ -336,12 +425,52 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel1(char i, char c, char d, b
     else if (d == 'D') return 3;
   }
 
-  // Buscamos casillas de tipo camino y sendero (objetivo Nivel 1)
-  if (c == 'C' || c == 'S' || (c == 'B' && zap)) return 2;
-  else if (i == 'C' || i == 'S' || (i == 'B' && zap)) return 1;
-  else if (d == 'C' || d == 'S' || (d == 'B' && zap)) return 3;
+  // Buscamos casillas de tipo camino o sendero (en este nivel no tenemos en cuenta energía)
+  // Pero además iremos a la casilla que haya sido visitada menos veces
 
-  return 0;
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // Procedemos a buscar el minimo de visitas
+  // Inicializamos al maximo
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // Si estan en los rangos adecuados entonces accedemos y le asignamos su valor correspondiente
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+    
+  // elegimos la casilla menos visitada siempre que sea camino y sendero
+
+  int mejor_opcion = 0;  // en caso de que no encuentre nada, decide el agente
+  int menor = INT_MAX;
+
+  if (c != 'P' && EsCasillaTransitableLevel1(casilla_c.f, casilla_c.c, zap) && visitas_c < menor) {
+    menor = visitas_c;
+    mejor_opcion = 2; // WALK
+  }
+  if (i != 'P' && EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, zap) && visitas_i < menor) {
+    menor = visitas_i;
+    mejor_opcion = 1; // TURN_SL
+  }
+  if (d != 'P' && EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, zap) && visitas_d < menor) {
+    menor = visitas_d;
+    mejor_opcion = 3; // TURN_SL
+  }
+
+  return mejor_opcion; 
 }
 
 
@@ -558,6 +687,19 @@ bool ComportamientoTecnico::EsAccesiblePorAltura(const ubicacion &actual) {
   return true;
 }
 
+// Funcion auxiliar cuando queremos saber si dos casillas son accesibles por altura
+bool ComportamientoTecnico::EsAccesiblePorAltura(const ubicacion &origen, const ubicacion &destino) {
+  if (destino.f < 0 || destino.f >= mapaCotas.size() || destino.c < 0 || destino.c >= mapaCotas[0].size()) {
+      return false;
+  }
+  
+  // Calculo del desnivel absoluto
+  int desnivel = abs(mapaCotas[destino.f][destino.c] - mapaCotas[origen.f][origen.c]);
+  
+  // El Técnico solo puede superar un desnivel de +-1 (Zapatillas no le afectan a la altura)
+  return desnivel <= 1; 
+}
+
 /**
  * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
  * Calcula la casilla frontal según la orientación actual (8 direcciones).
@@ -726,5 +868,4 @@ void ComportamientoTecnico::VisualizaPlan(const ubicacion &st,
     it++;
   }
 }
-
 

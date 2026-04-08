@@ -36,7 +36,6 @@ public:
     tengo_zapatillas = false;
     last_action = IDLE;
     giros_consecutivos = 0;
-    estado_actual = Avanza; // Por defecto Avanza 
     girar_derecha = true;
   }
 
@@ -48,12 +47,6 @@ public:
   ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR, 
                        std::vector<std::vector<unsigned char>> mapaC): 
                        Comportamiento(mapaR, mapaC) {
-    // Inicializar Variables de Estado
-    tengo_zapatillas = false;
-    last_action = IDLE;
-    giros_consecutivos = 0;
-    estado_actual = Avanza; // Por defecto Avanza 
-    girar_derecha = true;
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport): Comportamiento(comport) {}
@@ -157,6 +150,7 @@ protected:
    * @return true si el desnivel con la casilla de delante es admisible.
    */
   bool EsAccesiblePorAltura(const ubicacion &actual);
+  bool EsAccesiblePorAltura(const ubicacion &origen, const ubicacion &destino);
 
   /**
    * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
@@ -211,9 +205,9 @@ protected:
  * @param d terreno que hay en la pos 3 (45derecha)
  * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
  */
-  int VeoCasillaInteresante(char i, char c, char d);
+  int VeoCasillaInteresante(char i, char c, char d, ubicacion actual);
 
-  int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap);
+  int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual);
 
 private:
   // =========================================================================
@@ -223,14 +217,12 @@ private:
   bool tengo_zapatillas; 
   Action last_action;
   int giros_consecutivos; // Para evitar bucles girando, si == 4, vuelta completa, buscamos otra alternativa
-
-  enum Estado{Avanza, Gira}; 
-  // Si esta en Avanza, caminará al frente hasta encontrar un muro, si esta en Gira, entonces si encontramos un camino al girar avanzamos y si no seguimos girando 
-  Estado estado_actual;
   
   // Variable que nos indica si giramos a la derecha o no para evitar bucles infinitos. Se decidirá en el futuro de forma aleatoria con rand.
   bool girar_derecha; 
   
+  // Matriz para guardar las veces que hemos visitado cada casilla
+  std::vector<std::vector<int>> mapaVisitados;
 };
 
 #endif

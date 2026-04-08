@@ -25,7 +25,6 @@ public:
     tengo_zapatillas = false;
     last_action = IDLE;
     giros_consecutivos = 0;
-    estado_actual = Avanza; // Por defecto Avanza 
     girar_derecha = true;
   }
 
@@ -142,6 +141,9 @@ protected:
    * @return true si el desnivel con la casilla de delante es admisible.
    */
   bool EsAccesiblePorAltura(const ubicacion &actual, bool zap);
+  // auxiliar
+  bool EsAccesiblePorAltura(const ubicacion &actual, const ubicacion &destino, bool zap);
+
 
   /**
    * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
@@ -198,11 +200,12 @@ protected:
  * @param c  terreno que hay en la pos 2 (delante)
  * @param d terreno que hay en la pos 3 (45derecha)
  * @param zap indica si tenemos o no las zapatillas
+ * @param actual ubicacion actual del agente
  * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
  */
-  int VeoCasillaInteresante(char i, char c, char d, bool zap);
+  int VeoCasillaInteresante(char i, char c, char d, bool zap, ubicacion actual);
 
-  int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap);
+  int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual);
 
 
 
@@ -214,14 +217,12 @@ private:
   bool tengo_zapatillas; 
   Action last_action;
   int giros_consecutivos; // Para evitar bucles girando, si == 4, vuelta completa, buscamos otra alternativa
-
-  enum Estado{Avanza, Gira}; 
-  // Si esta en Avanza, caminará al frente hasta encontrar un muro, si esta en Gira, entonces si encontramos un camino al girar avanzamos y si no seguimos girando 
-  Estado estado_actual;
   
   // Variable que nos indica si giramos a la derecha o no para evitar bucles infinitos. Se decidirá en el futuro de forma aleatoria con rand.
   bool girar_derecha;  
 
+  // Matriz para guardar las veces que hemos visitado cada casilla
+  std::vector<std::vector<int>> mapaVisitados;
 };
 
 #endif
