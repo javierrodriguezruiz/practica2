@@ -65,6 +65,12 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
 
+  // Comprobamos ademas que el ingeniero no esté en ninguna de las casillas
+  if (sensores.agentes[1] == 'i') i = 'P'; 
+  // si está, la marcamos como precipicio para no pasar
+  if (sensores.agentes[2] == 'i') c = 'P';
+  if (sensores.agentes[3] == 'i') d = 'P';
+
   
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   // Dentro del metodo usamos memoria de casillas visitadas para explorar nuevas casillas
@@ -108,7 +114,10 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
 
-  // Comentar algo mejor
+  // Si podemos avanzar pero en frente tenemos al ingeniero, giraremos
+  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
+    puedo_avanzar = false; 
+  }
   
   if (puedo_avanzar){
     accion = WALK;
@@ -137,12 +146,12 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
         ubicacion casilla_d = Delante(der);
 
 
-      if (EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_i)){
+      if (EsCasillaTransitableLevel0(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_i)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
 
       }
 
-      if (EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_d)){
+      if (EsCasillaTransitableLevel0(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_d)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
 
       }
@@ -219,6 +228,12 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
 
+  // Comprobamos ademas que el ingeniero no esté en ninguna de las casillas
+  if (sensores.agentes[1] == 'a') i = 'P'; 
+  // si está, la 'marcamos' como precipicio para no pasar
+  if (sensores.agentes[2] == 'a') c = 'P';
+  if (sensores.agentes[3] == 'a') d = 'P';
+
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas, actual);
 
@@ -240,9 +255,11 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   Action accion = IDLE;
 
   bool puedo_avanzar = (EsCasillaTransitableLevel1(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
-  
 
-  // Comentar algo mejor
+  // Si podemos avanzar pero en frente tenemos al ingeniero, giraremos
+  if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
+    puedo_avanzar = false; 
+  }
   
   if (puedo_avanzar){
     accion = WALK;
@@ -288,7 +305,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
         
       last_action = accion;
     }
-
   }
 
 
@@ -368,7 +384,7 @@ int ComportamientoTecnico::VeoCasillaInteresante(char i, char c, char d, ubicaci
     else if (d == 'D') return 3;
   }
 
-    // Buscamos casillas de tipo camino o sendero (en este nivel no tenemos en cuenta energía)
+  // Buscamos casillas de tipo camino o sendero (en este nivel no tenemos en cuenta energía)
   // Pero además iremos a la casilla que haya sido visitada menos veces
 
   ubicacion izq = actual;

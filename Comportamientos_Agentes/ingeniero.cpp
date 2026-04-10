@@ -80,10 +80,13 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
 
   // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 'a') i = 'P'; 
+  if (sensores.agentes[1] == 't') i = 'P'; 
   // si está, la marcamos como precipicio para no pasar
-  if (sensores.agentes[2] == 'a') c = 'P';
-  if (sensores.agentes[3] == 'a') d = 'P';
+  if (sensores.agentes[2] == 't'){
+    last_action = TURN_SR;
+    return TURN_SR;
+  }
+  if (sensores.agentes[3] == 't') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   int pos = VeoCasillaInteresante(i, c, d, tengo_zapatillas, actual);
@@ -129,8 +132,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
 
   // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
-  if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
-      puedo_avanzar = false; 
+  if (puedo_avanzar && (sensores.agentes[2] == 't')) {
+    puedo_avanzar = false; 
   }
 
 if (puedo_avanzar){
@@ -152,21 +155,21 @@ if (puedo_avanzar){
       int visitas_d = INT_MAX;
 
       // obtenemos ubicacion de casilla derecha e izquierda (90º)
-        ubicacion izq = actual;
-        izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
-        ubicacion casilla_i = Delante(izq);
+      ubicacion izq = actual;
+      izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+      ubicacion casilla_i = Delante(izq);
 
-        ubicacion der = actual;
-        der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
-        ubicacion casilla_d = Delante(der);
+      ubicacion der = actual;
+      der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+      ubicacion casilla_d = Delante(der);
 
 
-      if (EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
+      if (EsCasillaTransitableLevel0(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
 
       }
 
-      if (EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
+      if (EsCasillaTransitableLevel0(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
 
       }
@@ -282,7 +285,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
 
   // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
   if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
-      puedo_avanzar = false; 
+    puedo_avanzar = false; 
   }
 
 if (puedo_avanzar){
