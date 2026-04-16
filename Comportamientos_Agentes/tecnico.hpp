@@ -18,7 +18,23 @@
  * Esta clase implementa el comportamiento del agente Técnico en el mundo Belkan.
  * El técnico colabora con el ingeniero para resolver el problema de instalación de tuberías
  */
+struct EstadoT{
+  ubicacion site;
+  bool zapatillas;
 
+  bool operator == (const EstadoT &st) const{
+    return (site==st.site && zapatillas==st.zapatillas);
+  }
+};
+
+struct NodoT{
+  EstadoT estado;
+  list<Action> secuencia;
+
+  bool operator==(const NodoT &node)const{
+    return estado==node.estado;
+  }
+};
 
 
 class ComportamientoTecnico : public Comportamiento {
@@ -47,6 +63,9 @@ public:
   ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR, 
                        std::vector<std::vector<unsigned char>> mapaC): 
                        Comportamiento(mapaR, mapaC) {
+
+    hayPlan = false;
+    tengo_zapatillas=false;
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport): Comportamiento(comport) {}
@@ -118,6 +137,34 @@ public:
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_6(Sensores sensores);
+
+/**
+ * @brief Comportamiento del técnico para el Nivel E.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+  Action ComportamientoTecnicoNivel_E(Sensores sensores);
+
+bool CasillaAccesibleTecnico(const EstadoT &st, const vector<vector<unsigned char>> &terreno, const
+  vector<vector<unsigned char>> &altura);
+  EstadoT applyT(Action accion, const EstadoT & st, const vector<vector<unsigned char>> &terreno, const
+vector<vector<unsigned char>> &altura);
+bool Find (const NodoT & st, const list<NodoT> &lista);
+
+EstadoT NextCasillaTecnico(const EstadoT &st);
+
+
+/**
+ * @brief Primera aprox a la búsqueda en anchura
+ * @param inicio Estado Inicial de la busqueda
+ * @param final Estado Final de la busqueda
+ * @param terreno Matriz que contiene la información del terreno
+ * @param altura Matriz que contiene la altura del mapa.
+ * 
+ * @return La secuencia de acciones para llegar al estado final
+ * @note Devuelve un plan vacío si no es posible encontrar un plan válido
+ */
+list<Action> B_Anchura(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
 
 protected:
   // =========================================================================
@@ -223,8 +270,11 @@ private:
   
   // Matriz para guardar las veces que hemos visitado cada casilla
   std::vector<std::vector<int>> mapaVisitados;
+
+
+  // NIVEL E
+  bool hayPlan;
+  list<Action> plan;
 };
 
 #endif
-
-/*Que te parece si cambiamos la logica de que los giros se decidan con rand para que ahora se hagan 4 giros a un lado y luego se cambien a 4 giros a otro ? (teniendo en cuenta que los giros son de 45 grados)*/
