@@ -81,12 +81,15 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
   if (sensores.agentes[1] == 't') i = 'P'; 
-  // si está, la marcamos como precipicio para no pasar
+  // si está a la izquierda o la derecha, la marcamos como precipicio para no pasar
+  if (sensores.agentes[3] == 't') d = 'P';
+  // if (sensores.agentes[2] == 't') c = 'P'; // si es
+
+  // Si nos encontramos con el tecnico en frente, entonces giramos para esquivarlo
   if (sensores.agentes[2] == 't'){
     last_action = TURN_SR;
     return TURN_SR;
-  }
-  if (sensores.agentes[3] == 't') d = 'P';
+  } // Sin sumar giros consecutivos pues es para esquivar el tecnico
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   int pos = VeoCasillaInteresante(i, c, d, tengo_zapatillas, actual);
@@ -102,10 +105,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     return TURN_SR;
   }
 
-  
-  // Añado aquí lo de que si la veo voy hacia ella ?
+  // Llegados a este punto, pos==0 luego ninguna casilla adyacente interesante.
+
   // Analizamos TODA LA VISIÓN del agente por si 'U' estuviera en alguna casilla a la vista
-  // salvo las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
+  // diferente a las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
   
   // Casillas del frente (si lo vemos en frente y la casilla de delante es camino)
   if (( sensores.superficie[2] == 'U' || sensores.superficie[6] == 'U' || sensores.superficie[12] == 'U') && es_camino(c))
@@ -123,15 +126,15 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   
 
   
-  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
-  // Pasamos a explorar:
+  // Si llegamos a este punto, pos == 0 y ninguna posición de toda la visión es de T de Residuos, 
+  // luego no hay ningun objetivo próximo. Pasamos a explorar:
 
   // Inicializamos la accion a IDLE 
   Action accion = IDLE;
 
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
 
-  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
+  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos. Double check de tecnico . Necesario??
   if (puedo_avanzar && (sensores.agentes[2] == 't')) {
     puedo_avanzar = false; 
   }
@@ -142,14 +145,13 @@ if (puedo_avanzar){
   }
   else{
 
-    // Vemos que casilla ha sido menos visitada si la izq o la derecha
-
     if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action; // entonces realizamos el mismo giro que hicimos
+      accion = last_action; 
       giros_consecutivos++;
+      // entonces realizamos el mismo giro que hicimos y completamos el giro de 90º
     }
-    else{ 
-      giros_consecutivos++;
+    else{ // Vemos que casilla ha sido menos visitada si la izq o la derecha
+
       // observamos a la derecha y a la izquierda (90 grados)
       int visitas_i = INT_MAX;
       int visitas_d = INT_MAX;
@@ -179,17 +181,16 @@ if (puedo_avanzar){
       else
         accion = TURN_SL;
         
-      last_action = accion;
+      giros_consecutivos++;
     }
-
   }
-
 
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
 
   // guardamos la accion en ultima_accion
+  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
