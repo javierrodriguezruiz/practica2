@@ -391,7 +391,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_E(Sensores sensores) {
     inicio.zapatillas = tengo_zapatillas;
     fin.site.f = sensores.BelPosF;
     fin.site.c = sensores.BelPosC;
-    plan = B_Anchura(inicio, fin, mapaResultado, mapaCotas);
+    plan = B_Anchura_V2(inicio, fin, mapaResultado, mapaCotas);
     VisualizaPlan(inicio.site,plan);
     hayPlan = plan.size() != 0;
   }
@@ -550,6 +550,76 @@ list<Action> ComportamientoTecnico::B_Anchura(const EstadoT &inicio, const Estad
       // Paso a evaluar el siguiente nodo en la lista "frontier"
       if (!SolutionFound and !frontier.empty()){
           current_node = frontier.front();
+          SolutionFound = (current_node.estado.site.f == final.site.f and current_node.estado.site.c == final.site.c);
+      }
+  }
+  // Devuelvo el camino encontrado.
+
+  if (SolutionFound)
+    path = current_node.secuencia;
+
+  return path;
+}
+
+list<Action> ComportamientoTecnico::B_Anchura_V2(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura){
+  NodoT current_node;
+  list<NodoT> frontier;
+  set<NodoT> explored;
+  list<Action> path;
+
+  current_node.estado = inicio;
+  frontier.push_back(current_node);
+  bool SolutionFound = (current_node.estado.site.f == final.site.f && current_node.estado.site.c == final.site.c);
+
+  while (!SolutionFound and !frontier.empty()){
+      frontier.pop_front();
+      explored.insert(current_node);
+
+      // Compruebo si estoy en una casilla que da las zapatillas
+      if (terreno[current_node.estado.site.f][current_node.estado.site.c] == 'D'){
+          current_node.estado.zapatillas = true;
+      }
+
+      // Genero el hijo resultante de aplicar la acción WALK
+      NodoT child_Walk = current_node;
+      child_Walk.estado = applyT(WALK, current_node.estado, terreno, altura);
+      if (child_Walk.estado.site.f == final.site.f and child_Walk.estado.site.c == final.site.c){
+          // El hijo generado es solucion
+          child_Walk.secuencia.push_back(WALK);
+          current_node = child_Walk;
+          SolutionFound = true;
+      }
+      else if (explored.find(child_Walk) == explored.end()){
+          // Se mete en la lista de frontier después de añadir a secuencia la acción
+          child_Walk.secuencia.push_back(WALK);
+          frontier.push_back(child_Walk);
+      }
+
+      if (!SolutionFound){
+          // El hijo resultante de aplicar la accion TURN_SR
+          NodoT child_TurnSR = current_node;
+          child_TurnSR.estado = applyT(TURN_SR, current_node.estado, terreno, altura);
+          if (explored.find(child_TurnSR) == explored.end()){
+              child_TurnSR.secuencia.push_back(TURN_SR);
+              frontier.push_back(child_TurnSR);
+          }
+
+          // El hijo resultante de aplicar la accion TURN_SL
+          NodoT child_TurnSL = current_node;
+          child_TurnSL.estado = applyT(TURN_SL, current_node.estado, terreno, altura);
+          if (explored.find(child_TurnSL) == explored.end()){
+              child_TurnSL.secuencia.push_back(TURN_SL);
+              frontier.push_back(child_TurnSL);
+          }
+      }
+
+      // Paso a evaluar el siguiente nodo en la lista "frontier"
+      if (!SolutionFound and !frontier.empty()){
+          current_node = frontier.front();
+          while(explored.find(current_node) != explored.end() && !frontier.empty()){
+            frontier.pop_front();
+            current_node = frontier.front();
+          }
           SolutionFound = (current_node.estado.site.f == final.site.f and current_node.estado.site.c == final.site.c);
       }
   }
