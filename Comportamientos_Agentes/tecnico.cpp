@@ -71,6 +71,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   // si está, la marcamos como precipicio para no pasar
   if (sensores.agentes[2] == 'i') c = 'P';
   if (sensores.agentes[3] == 'i') d = 'P';
+  // No esquivamos con este agente, simplemente marcamos para no ir. Ingeniero es quien esquiva girando
 
   
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 

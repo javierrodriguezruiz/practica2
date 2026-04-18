@@ -44,6 +44,7 @@ Action ComportamientoIngeniero::think(Sensores sensores)
   return accion;
 }
 
+
 // Niveles iniciales (Comportamientos reactivos simples)
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores)
 {
@@ -58,6 +59,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     mapaVisitados[sensores.posF][sensores.posC]++;
   }
 
+  // Actualizamos aburrimiento
+  if(mapaVisitados[sensores.posF][sensores.posC]>0)
+    turnos_aburrido++;
+  else
+    turnos_aburrido = 0;
+
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
@@ -71,7 +78,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   if (sensores.superficie[0] == 'U') {
     return IDLE; 
   }
-  
+
+  if (giros_pendientes > 0) {
+    giros_pendientes--;     // Descontamos un giro
+    giros_consecutivos = 0; // Reseteamos 
+    return TURN_SR;         // Giramos para dar la vuelta
+  }
   
   // BUSQUEDA DE CASILLAS OBJETIVO ADYACENTES AL AGENTE:
   // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
@@ -98,7 +110,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     giros_consecutivos = 0;
     return WALK;
   }else if (pos == 1){
-    giros_consecutivos = 0;
+    giros_consecutivos = 0; // ++?
     return TURN_SL;
   }else if (pos == 3){
     giros_consecutivos = 0;
@@ -110,6 +122,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   // Analizamos TODA LA VISIÓN del agente por si 'U' estuviera en alguna casilla a la vista
   // diferente a las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
   
+  // Añadir que solo si NO estamos en mitad de un giro, entonces vamos a dnd nos diga la vision completa?
+
   // Casillas del frente (si lo vemos en frente y la casilla de delante es camino)
   if (( sensores.superficie[2] == 'U' || sensores.superficie[6] == 'U' || sensores.superficie[12] == 'U') && es_camino(c))
     return WALK;
@@ -125,7 +139,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     return TURN_SR;
   
 
-  
   // Si llegamos a este punto, pos == 0 y ninguna posición de toda la visión es de T de Residuos, 
   // luego no hay ningun objetivo próximo. Pasamos a explorar:
 
@@ -139,7 +152,15 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     puedo_avanzar = false; 
   }
 
-if (puedo_avanzar){
+
+  // Si llevamos demasiados pasos pisando casillas ya pisadas, estamos atrapados en un bucle, provocamos giro 180º
+  if (turnos_aburrido > 30) {
+    turnos_aburrido = 0;
+    giros_pendientes=3; // Para dar la vuelta de 180 (4 giros de 45)
+    return TURN_SR;
+  }
+
+  if (puedo_avanzar){
     accion = WALK;
     giros_consecutivos = 0;
   }
@@ -186,8 +207,10 @@ if (puedo_avanzar){
   }
 
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
-  if (giros_consecutivos >= 8)
+  if (giros_consecutivos >= 8){
     accion =  IDLE; 
+    giros_consecutivos=0;
+  }
 
   // guardamos la accion en ultima_accion
   last_action = accion;
@@ -418,6 +441,7 @@ char ComportamientoIngeniero::ViablePorAltura (char casilla, int dif, bool zap){
  * @param zap indica si tenemos o no las zapatillas
  * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
  */
+
 int ComportamientoIngeniero::VeoCasillaInteresante(char i, char c, char d, bool zap, ubicacion actual){
   // Buscamos si la meta se encuentra alrededor nuestra
   if (c == 'U') return 2; // en frente
@@ -486,6 +510,7 @@ int ComportamientoIngeniero::VeoCasillaInteresante(char i, char c, char d, bool 
  * @param zap indica si tenemos o no las zapatillas
  * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
  */
+
 int ComportamientoIngeniero::VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual){
 
   // Buscamos las zapatillas, solo en caso de NO tenerlas ya

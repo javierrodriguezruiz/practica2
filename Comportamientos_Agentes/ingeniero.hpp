@@ -26,6 +26,8 @@ public:
     last_action = IDLE;
     giros_consecutivos = 0;
     girar_derecha = true;
+    turnos_aburrido=0;
+    giros_pendientes=0;
   }
 
   /**
@@ -220,6 +222,8 @@ private:
   
   // Variable que nos indica si giramos a la derecha o no para evitar bucles infinitos. Se decidirá en el futuro de forma aleatoria con rand.
   bool girar_derecha;  
+  int turnos_aburrido;
+  int giros_pendientes;
 
   // Matriz para guardar las veces que hemos visitado cada casilla
   std::vector<std::vector<int>> mapaVisitados;
