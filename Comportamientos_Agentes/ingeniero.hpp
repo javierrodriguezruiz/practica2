@@ -25,7 +25,6 @@ public:
     tengo_zapatillas = false;
     last_action = IDLE;
     giros_consecutivos = 0;
-    girar_derecha = true;
     turnos_aburrido=0;
     giros_pendientes=0;
   }
@@ -218,10 +217,8 @@ private:
 
   bool tengo_zapatillas; 
   Action last_action;
-  int giros_consecutivos; // Para evitar bucles girando, si == 4, vuelta completa, buscamos otra alternativa
+  int giros_consecutivos; // Para evitar bucles girando
   
-  // Variable que nos indica si giramos a la derecha o no para evitar bucles infinitos. Se decidirá en el futuro de forma aleatoria con rand.
-  bool girar_derecha;  
   int turnos_aburrido;
   int giros_pendientes;
 

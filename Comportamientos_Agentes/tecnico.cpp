@@ -45,6 +45,16 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
     mapaVisitados[sensores.posF][sensores.posC]++;
   }
 
+  // Calculamos umbral de aburrimiento en funcion de como de grande sea el mapa
+  int umbral_aburrimiento = mapaResultado.size(); 
+  if (umbral_aburrimiento<30) umbral_aburrimiento = 30;  //  Para mapas pequeños
+
+  // Actualizamos aburrimiento
+  if(mapaVisitados[sensores.posF][sensores.posC]>0)
+    turnos_aburrido++;
+  else
+    turnos_aburrido = 0;
+  
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
@@ -54,13 +64,18 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
     tengo_zapatillas = true;
   }
 
-  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al agente
   if (sensores.superficie[0] == 'U') {
     return IDLE; 
   }
 
+  if (giros_pendientes > 0) {
+    giros_pendientes--;     // Descontamos un giro
+    giros_consecutivos = 0; // Reseteamos 
+    return TURN_SR;         // Giramos para dar la vuelta
+  }  
 
-  // BUSQUEDA DE CASILLAS OBJETIVO:
+  // BUSQUEDA DE CASILLAS OBJETIVO ADYACENTES AL AGENTE:
   // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
   char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
   char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
@@ -89,8 +104,8 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
     return TURN_SR;
   }
 
+  // Llegados a este punto, pos==0 luego ninguna casilla adyacente interesante.
   
-  // Añado aquí lo de que si la veo voy hacia ella ?
   // Analizamos TODA LA VISIÓN del agente por si 'U' estuviera en alguna casilla a la vista
   // salvo las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
   // Casillas del frente (si lo vemos en frente y la casilla de delante es camino)
@@ -120,20 +135,29 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
     puedo_avanzar = false; 
   }
-  
+ 
+  // Si llevamos demasiados pasos pisando casillas ya pisadas, estamos atrapados en un bucle, provocamos giro 180º
+  if (turnos_aburrido > umbral_aburrimiento) {
+    turnos_aburrido = 0;
+    giros_pendientes=3; // Para dar la vuelta de 180 (4 giros de 45)
+    return TURN_SR;
+  }
+    
+
   if (puedo_avanzar){
     accion = WALK;
     giros_consecutivos = 0;
   }
-  else{
+  else{   // Vemos que casilla ha sido menos visitada si la izq o la derecha
 
-    // Vemos que casilla ha sido menos visitada si la izq o la derecha
     if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action; // entonces realizamos el mismo giro que hicimos
+      accion = last_action;
       giros_consecutivos++;
+      // entonces realizamos el mismo giro que hicimos y completamos el giro de 90º
+
     }
     else{ 
-      giros_consecutivos++;
+
       // observamos a la derecha y a la izquierda (90 grados)
       int visitas_i = INT_MAX;
       int visitas_d = INT_MAX;
@@ -150,28 +174,30 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 
       if (EsCasillaTransitableLevel0(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_i)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-
       }
 
       if (EsCasillaTransitableLevel0(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(casilla_d)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-
       }
 
       if (visitas_d <= visitas_i)
         accion = TURN_SR;
       else
         accion = TURN_SL;
-        
-      last_action = accion;
+      
+        giros_consecutivos++;
     }
-
   }
 
 
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
-  if (giros_consecutivos >= 8)
-    accion =  IDLE; 
+  if (giros_consecutivos >= 8){
+    accion =  IDLE;
+    giros_consecutivos = 0;
+  }
+  
+  // guardamos la accion en last_action  
+  last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
@@ -231,10 +257,10 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
 
   // Comprobamos ademas que el ingeniero no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 'a') i = 'P'; 
+  if (sensores.agentes[1] == 'i') i = 'P'; 
   // si está, la 'marcamos' como precipicio para no pasar
-  if (sensores.agentes[2] == 'a') c = 'P';
-  if (sensores.agentes[3] == 'a') d = 'P';
+  if (sensores.agentes[2] == 'i') c = 'P';
+  if (sensores.agentes[3] == 'i') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas, actual);
@@ -259,7 +285,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   bool puedo_avanzar = (EsCasillaTransitableLevel1(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
 
   // Si podemos avanzar pero en frente tenemos al ingeniero, giraremos
-  if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
+  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
     puedo_avanzar = false; 
   }
   
@@ -271,7 +297,8 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
 
     // Vemos que casilla ha sido menos visitada si la izq o la derecha
     if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action; // entonces realizamos el mismo giro que hicimos
+      accion = last_action;
+      // entonces realizamos el mismo giro que hicimos para completar el giro de 90º
       giros_consecutivos++;
     }
     else{ 
@@ -292,12 +319,10 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
 
       if (EsCasillaTransitableLevel1(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-
       }
 
       if (EsCasillaTransitableLevel1(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-
       }
 
       if (visitas_d <= visitas_i)
@@ -314,7 +339,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
   if (giros_consecutivos >= 8)
     accion =  IDLE; 
 
-  
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 

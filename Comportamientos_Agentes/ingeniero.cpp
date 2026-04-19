@@ -59,6 +59,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     mapaVisitados[sensores.posF][sensores.posC]++;
   }
 
+  // Calculamos umbral de aburrimiento en funcion de como de grande sea el mapa
+  int umbral_aburrimiento = mapaResultado.size(); 
+  if (umbral_aburrimiento<30) umbral_aburrimiento = 30;  //  Para mapas pequeños
+
   // Actualizamos aburrimiento
   if(mapaVisitados[sensores.posF][sensores.posC]>0)
     turnos_aburrido++;
@@ -74,7 +78,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     tengo_zapatillas = true;
   }
 
-  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al player
+  // Si encontramos la casilla T. Residuos, entonces terminamos la búsqueda y paramos al agente
   if (sensores.superficie[0] == 'U') {
     return IDLE; 
   }
@@ -95,7 +99,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   if (sensores.agentes[1] == 't') i = 'P'; 
   // si está a la izquierda o la derecha, la marcamos como precipicio para no pasar
   if (sensores.agentes[3] == 't') d = 'P';
-  // if (sensores.agentes[2] == 't') c = 'P'; // si es
 
   // Si nos encontramos con el tecnico en frente, entonces giramos para esquivarlo
   if (sensores.agentes[2] == 't'){
@@ -104,13 +107,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   } // Sin sumar giros consecutivos pues es para esquivar el tecnico
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
+  // Dentro del metodo usamos memoria de casillas visitadas para explorar nuevas casillas
   int pos = VeoCasillaInteresante(i, c, d, tengo_zapatillas, actual);
 
   if (pos == 2){
     giros_consecutivos = 0;
     return WALK;
   }else if (pos == 1){
-    giros_consecutivos = 0; // ++?
+    giros_consecutivos = 0;
     return TURN_SL;
   }else if (pos == 3){
     giros_consecutivos = 0;
@@ -121,9 +125,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   // Analizamos TODA LA VISIÓN del agente por si 'U' estuviera en alguna casilla a la vista
   // diferente a las posiciones adyacentes 1, 2 y 3 que ya han sido estudiadas
-  
-  // Añadir que solo si NO estamos en mitad de un giro, entonces vamos a dnd nos diga la vision completa?
-
   // Casillas del frente (si lo vemos en frente y la casilla de delante es camino)
   if (( sensores.superficie[2] == 'U' || sensores.superficie[6] == 'U' || sensores.superficie[12] == 'U') && es_camino(c))
     return WALK;
@@ -147,11 +148,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   bool puedo_avanzar = (EsCasillaTransitableLevel0(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
 
-  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos. Double check de tecnico . Necesario??
+  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos.
   if (puedo_avanzar && (sensores.agentes[2] == 't')) {
     puedo_avanzar = false; 
   }
-
 
   // Si llevamos demasiados pasos pisando casillas ya pisadas, estamos atrapados en un bucle, provocamos giro 180º
   if (turnos_aburrido > 30) {
@@ -160,18 +160,19 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     return TURN_SR;
   }
 
+  
   if (puedo_avanzar){
     accion = WALK;
     giros_consecutivos = 0;
   }
-  else{
+  else{  // Vemos que casilla ha sido menos visitada si la izq o la derecha
 
     if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action; 
+      accion = last_action;
       giros_consecutivos++;
       // entonces realizamos el mismo giro que hicimos y completamos el giro de 90º
     }
-    else{ // Vemos que casilla ha sido menos visitada si la izq o la derecha
+    else{
 
       // observamos a la derecha y a la izquierda (90 grados)
       int visitas_i = INT_MAX;
@@ -189,12 +190,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
       if (EsCasillaTransitableLevel0(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-
       }
 
       if (EsCasillaTransitableLevel0(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-
       }
 
       if (visitas_d <= visitas_i)
@@ -206,13 +205,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     }
   }
 
+
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
   if (giros_consecutivos >= 8){
     accion =  IDLE; 
     giros_consecutivos=0;
   }
 
-  // guardamos la accion en ultima_accion
+  // guardamos la accion en last_action
   last_action = accion;
   
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
@@ -258,9 +258,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
     mapaVisitados[sensores.posF][sensores.posC]++;
   }
 
-  // Actualizamos el mapa y el estado del juego
-  // ActualizarMapa(sensores);
-
   // Obtenemos los datos de los sensores para observar si podemos avanzar
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
@@ -280,10 +277,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
 
   // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 'a') i = 'P'; 
+  if (sensores.agentes[1] == 't') i = 'P'; 
   // si está, la 'marcamos' como precipicio para no pasar
-  if (sensores.agentes[2] == 'a') c = 'P';
-  if (sensores.agentes[3] == 'a') d = 'P';
+  if (sensores.agentes[2] == 't') c = 'P';
+  if (sensores.agentes[3] == 't') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
   int pos = VeoCasillaInteresanteNivel1(i, c, d, tengo_zapatillas, actual);
@@ -308,7 +305,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
   bool puedo_avanzar = (EsCasillaTransitableLevel1(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
 
   // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
-  if (puedo_avanzar && (sensores.agentes[2] == 'a')) {
+  if (puedo_avanzar && (sensores.agentes[2] == 't')) {
     puedo_avanzar = false; 
   }
 
