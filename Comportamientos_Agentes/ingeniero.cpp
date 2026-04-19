@@ -279,7 +279,10 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
   // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
   if (sensores.agentes[1] == 't') i = 'P'; 
   // si está, la 'marcamos' como precipicio para no pasar
-  if (sensores.agentes[2] == 't') c = 'P';
+  if (sensores.agentes[2] == 't'){
+    last_action = TURN_SR;
+    return TURN_SR;
+  }
   if (sensores.agentes[3] == 't') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
