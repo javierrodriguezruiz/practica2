@@ -365,6 +365,62 @@ if (puedo_avanzar){
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 
+/*
+Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores)
+{
+  Action accion = IDLE;
+
+  // 1. Actualizamos la realidad física (Zapatillas)
+  if (sensores.superficie[0] == 'D') {
+      tengo_zapatillas = true;
+  }
+
+  // 2. Si no hay plan, lo calculamos
+  if (!hayPlan){
+    EstadoI inicio, fin;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tengo_zapatillas;
+
+    fin.site.f = sensores.BelPosF;
+    fin.site.c = sensores.BelPosC;
+    
+    plan = B_Anchura_V2(inicio, fin, mapaResultado, mapaCotas);
+    VisualizaPlan(inicio.site, plan);
+    hayPlan = (plan.size() > 0);
+  }
+
+  // 3. Ejecución segura del plan
+  if (hayPlan && !plan.empty()){
+    Action sig_accion = plan.front();
+
+    // SISTEMA ANTI-COLISIONES (Esperamos sin borrar la acción del plan)
+    if (sig_accion == WALK) {
+        if (sensores.agentes[2] != '_') { // Si la casilla de en frente (2) está ocupada
+            return IDLE; // Esperamos a que se aparte
+        }
+    } 
+    else if (sig_accion == JUMP) {
+        // En un JUMP, ni la intermedia (2) ni el destino final (6) pueden estar ocupados
+        if (sensores.agentes[2] != '_' || sensores.agentes[6] != '_') {
+            return IDLE; // Esperamos a que se aparte
+        }
+    }
+
+    // Si el camino está despejado, extraemos la acción del plan y la ejecutamos
+    accion = sig_accion;
+    plan.pop_front();
+  }
+
+  if (plan.empty()){
+    hayPlan = false;
+  }
+
+  return accion;
+}
+*/
+
 // Niveles avanzados (Uso de búsqueda)
 /**
  * @brief Comportamiento del ingeniero para el Nivel 2 (búsqueda).
@@ -401,6 +457,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores
 
   return accion;
 }
+  
 
 /**
  * @brief Comportamiento del ingeniero para el Nivel 3.

@@ -348,10 +348,55 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
+/*
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_2(Sensores sensores) {
   // si molesta al ingeniero, debe moverse para no obstaculizarlo
+  // Si esta el ingeniero, entonces 
   return IDLE;
 }
+   */
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_2(Sensores sensores) {
+    // Variable estática para recordar que estamos huyendo del ingeniero
+    static int pasos_huida = 0;
+
+    // 1. MODO HUIDA: Si tenemos pasos pendientes por dar para apartarnos
+    if (pasos_huida > 0) {
+        unsigned char t = sensores.superficie[2];
+        int dif_altura = abs((int)sensores.cota[2] - (int)sensores.cota[0]);
+
+        // Comprobamos si la casilla de justo enfrente está libre y es pisable
+        if (sensores.agentes[2] == '-' && 
+            t != 'M' && t != 'P' && t != 'A' && t != 'B' && 
+            dif_altura <= 1) { // El técnico no suele llevar zapatillas, desnivel max 1
+            
+            pasos_huida--;
+            return WALK; // Damos el paso para despejar el camino
+        } else {
+            // Si íbamos a huir pero hay un muro o precipicio delante, giramos para buscar otra salida
+            return TURN_SR; 
+        }
+    }
+
+    // 2. MODO FARO: Escaneamos si el ingeniero está en nuestro campo visual
+    bool veo_ingeniero = false;
+    for (int i = 1; i < sensores.agentes.size(); i++) {
+        if (sensores.agentes[i] == 'i') {
+            veo_ingeniero = true;
+            break;
+        }
+    }
+
+    // 3. ACTIVAR ALARMA: Si vemos al ingeniero, decidimos apartarnos
+    if (veo_ingeniero) {
+        pasos_huida = 2; // Decidimos que daremos 2 pasos para dejarle hueco de sobra
+        return TURN_SR;  // Primero giramos para NO caminar hacia él y chocar
+    }
+
+    // 4. POR DEFECTO: Girar sobre nosotros mismos actuando como un radar estático
+    return TURN_SR;
+}
+ 
+ 
 
 /**
  * @brief Comportamiento del técnico para el Nivel 3.
