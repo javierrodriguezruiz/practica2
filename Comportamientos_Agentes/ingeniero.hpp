@@ -10,6 +10,47 @@
 
 #include "comportamientos/comportamiento.hpp"
 
+
+struct EstadoI{
+  ubicacion site;
+  bool zapatillas;
+
+  bool operator == (const EstadoI &st) const{
+    return (site==st.site && zapatillas==st.zapatillas);
+  }
+  bool operator<(const EstadoI &st) const {
+    if (site.f != st.site.f) return site.f < st.site.f;
+    if (site.c != st.site.c) return site.c < st.site.c;
+    if (site.brujula != st.site.brujula) return site.brujula < st.site.brujula;
+    return zapatillas < st.zapatillas;
+  }
+};
+
+struct NodoI {
+  EstadoI estado;
+  list<Action> secuencia;
+  int coste; //coste acumulado en dicho nodo
+
+  bool operator == (const NodoI &otro) const{
+    return estado == otro.estado;
+  }
+
+
+  bool operator >(const NodoI &otro) const {
+    return coste > otro.coste;
+  }
+
+  // Mantenemos el operador < para el set de explorados
+  bool operator <(const NodoI &node) const {
+    if (estado.site.f < node.estado.site.f) return true;
+    else if (estado.site.f == node.estado.site.f && estado.site.c < node.estado.site.c) return true;
+    else if (estado.site.f == node.estado.site.f && estado.site.c == node.estado.site.c && estado.site.brujula < node.estado.site.brujula) return true;
+    else if (estado.site.f == node.estado.site.f && estado.site.c == node.estado.site.c && estado.site.brujula == node.estado.site.brujula && estado.zapatillas < node.estado.zapatillas) return true;
+    else return false;
+  }
+};
+
+
 class ComportamientoIngeniero : public Comportamiento {
 public:
   // =========================================================================
@@ -27,6 +68,8 @@ public:
     giros_consecutivos = 0;
     turnos_aburrido=0;
     giros_pendientes=0;
+    hayPlan=false;
+    plan=list<Action>();
   }
 
   /**
@@ -163,13 +206,9 @@ protected:
   void PintaPlan(const list<Action> &plan);
 
 
-/**
- * @brief Imprime las coordenadas y operaciones de un plan de tubería.
- * @param plan  Lista de pasos (fila, columna, operación).
- */
-  void PintaPlan(const list<Paso> &plan);
+  void AnularMatriz(vector<vector<unsigned char>> &m);
 
-
+list<Action> CaminoDijkstra(const EstadoI& inicio, const EstadoI &final,const vector<vector<unsigned char>>& terreno, const vector<vector<unsigned char>>& altura);
   /**
  * @brief Convierte un plan de acciones en una lista de casillas para
  *        su visualización en el mapa gráfico.
@@ -177,6 +216,37 @@ protected:
  * @param plan  Lista de acciones del plan.
  */
   void VisualizaPlan(const ubicacion &st, const list<Action> &plan);
+
+  EstadoI NextCasillaIngeniero(const EstadoI &st);
+
+  bool CasillaAccesibleIngeniero(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+
+  bool CasillaAccesibleSalto(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+
+  EstadoI applyT(Action accion, const EstadoI & st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+
+bool Find (const NodoI & st, const list<NodoI> &lista);
+
+/**
+ * @brief Imprime las coordenadas y operaciones de un plan de tubería.
+ * @param plan  Lista de pasos (fila, columna, operación).
+ */
+  void PintaPlan(const list<Paso> &plan);
+
+/**
+ * @brief Primera aprox a la búsqueda en anchura
+ * @param inicio Estado Inicial de la busqueda
+ * @param final Estado Final de la busqueda
+ * @param terreno Matriz que contiene la información del terreno
+ * @param altura Matriz que contiene la altura del mapa.
+ * 
+ * @return La secuencia de acciones para llegar al estado final
+ * @note Devuelve un plan vacío si no es posible encontrar un plan válido
+ */
+//list<Action> B_Anchura(const EstadoI &inicio, const EstadoI &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
+
+list<Action> B_Anchura_V2(const EstadoI &inicio, const EstadoI &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
+
 
   /**
  * @brief Convierte un plan de tubería en la lista de casillas usada
@@ -209,7 +279,6 @@ protected:
   int VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual);
 
 
-
 private:
   // =========================================================================
   // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
@@ -224,6 +293,10 @@ private:
 
   // Matriz para guardar las veces que hemos visitado cada casilla
   std::vector<std::vector<int>> mapaVisitados;
+
+  // Nivel 2
+  bool hayPlan;
+  list<Action> plan;
 };
 
 #endif

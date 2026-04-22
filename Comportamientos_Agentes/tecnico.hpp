@@ -156,10 +156,9 @@ public:
  */
   Action ComportamientoTecnicoNivel_E(Sensores sensores);
 
-bool CasillaAccesibleTecnico(const EstadoT &st, const vector<vector<unsigned char>> &terreno, const
-  vector<vector<unsigned char>> &altura);
-  EstadoT applyT(Action accion, const EstadoT & st, const vector<vector<unsigned char>> &terreno, const
-vector<vector<unsigned char>> &altura);
+bool CasillaAccesibleTecnico(const EstadoT &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+
+EstadoT applyT(Action accion, const EstadoT & st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
 bool Find (const NodoT & st, const list<NodoT> &lista);
 
 EstadoT NextCasillaTecnico(const EstadoT &st);

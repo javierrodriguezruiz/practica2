@@ -373,8 +373,33 @@ if (puedo_avanzar){
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores)
 {
-  // TODO: Implementar búsqueda para el Nivel 2.
-  return IDLE;
+  Action accion = IDLE;
+
+  if (!hayPlan){
+    // Invocar al metodo de busqueda
+    EstadoI inicio, fin;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tengo_zapatillas;
+
+    fin.site.f = sensores.BelPosF;
+    fin.site.c = sensores.BelPosC;
+    
+    plan = B_Anchura_V2(inicio, fin, mapaResultado, mapaCotas);
+    VisualizaPlan(inicio.site,plan);
+    hayPlan = plan.size() != 0;
+  }
+  if (hayPlan && plan.size()>0){
+    accion = plan.front();
+    plan.pop_front();
+  }
+
+  if (plan.size()==0){
+    hayPlan = false;
+  }
+
+  return accion;
 }
 
 /**
@@ -908,6 +933,264 @@ void ComportamientoIngeniero::PintaPlan(const list<Paso> &plan)
     it++;
   }
   cout << "( longitud " << plan.size() << ")" << endl;
+}
+
+EstadoI ComportamientoIngeniero::NextCasillaIngeniero(const EstadoI &st){
+  EstadoI siguiente = st;
+
+  switch (st.site.brujula)
+  {
+    case norte:
+    siguiente.site.f = st.site.f - 1;
+    break;
+    case noreste:
+    siguiente.site.f = st.site.f - 1;
+    siguiente.site.c = st.site.c + 1;
+    break;
+    case este:
+    siguiente.site.c = st.site.c + 1;
+    break;
+    case sureste:
+    siguiente.site.f = st.site.f + 1;
+    siguiente.site.c = st.site.c + 1;
+    break;
+    case sur:
+    siguiente.site.f = st.site.f + 1;
+    break;
+    case suroeste:
+    siguiente.site.f = st.site.f + 1;
+    siguiente.site.c = st.site.c - 1;
+    break;
+    case oeste:
+    siguiente.site.c = st.site.c - 1;
+    break;
+    case noroeste:
+    siguiente.site.f = st.site.f - 1;
+    siguiente.site.c = st.site.c - 1;
+  }
+
+  return siguiente;
+}
+
+
+bool ComportamientoIngeniero::CasillaAccesibleIngeniero(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura) {
+  EstadoI next = applyT(WALK, st, terreno, altura); // Simulamos un paso
+  
+  // Comprobamos limites
+  if (next.site.f < 0 || next.site.f >= terreno.size() || next.site.c < 0 || next.site.c >= terreno[0].size()) return false;
+  
+  unsigned char t = terreno[next.site.f][next.site.c];
+  if (t == 'P' || t == 'M' || t == 'B') return false; // Intransitables son precipicio, muro y bosque
+  
+  int dif = abs((int)altura[next.site.f][next.site.c] - (int)altura[st.site.f][st.site.c]);
+  if ((!st.zapatillas && dif <= 1) || (st.zapatillas && dif <= 2)) return true; // con zap <=2
+  
+  return false;
+}
+
+bool ComportamientoIngeniero::CasillaAccesibleSalto(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura) {
+  //Casilla intermedia debe ser transitable (que se pueda caminar)
+  if (!CasillaAccesibleIngeniero(st, terreno, altura)) return false;
+
+  // Casilla destino 
+  EstadoI intermedio = applyT(WALK, st, terreno, altura);
+  EstadoI destino = applyT(JUMP, st, terreno, altura); // Simulamos 2 pasos (salto)
+  
+  // Comprobamos limites para segmentation 
+  if (destino.site.f < 0 || destino.site.f >= terreno.size() || destino.site.c < 0 || destino.site.c >= terreno[0].size()) return false;
+  
+  unsigned char t = terreno[destino.site.f][destino.site.c];
+  if (t == 'P' || t == 'M' || t == 'B') return false; // Intransitables son precipicio, muro y bosque
+  
+  // Validamos diferencia de altura entre mitad y destino
+  int dif_caida = abs((int)altura[destino.site.f][destino.site.c] - (int)altura[intermedio.site.f][intermedio.site.c]);
+  if (!st.zapatillas && dif_caida > 1) return false;
+  if (st.zapatillas && dif_caida > 2) return false;
+
+  // La diferencia de altura se calcula entre el INICIO y DESTINO
+  int dif = abs((int)altura[destino.site.f][destino.site.c] - (int)altura[st.site.f][st.site.c]);
+  if ((!st.zapatillas && dif <= 1) || (st.zapatillas && dif <= 2)) return true;
+  
+  return false;
+}
+
+
+EstadoI ComportamientoIngeniero::applyT(Action accion, const EstadoI & st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura){
+  EstadoI next = st;
+  bool f_dentro, c_dentro;
+  switch(accion){
+    case WALK:
+      next = NextCasillaIngeniero(st);
+
+      f_dentro = (next.site.f >= 0 && next.site.f < terreno.size());
+      c_dentro = (next.site.c >= 0 && next.site.c < terreno[0].size());
+      
+      if (f_dentro && c_dentro && terreno[next.site.f][next.site.c] == 'D')
+        next.zapatillas = true;
+      break;
+
+    case JUMP:
+      
+      // Avanzamos ahora dos casillas puesto que es un salto
+      next = NextCasillaIngeniero(st);
+      next = NextCasillaIngeniero(next);
+
+      f_dentro = (next.site.f >= 0 && next.site.f < terreno.size());
+      c_dentro = (next.site.c >= 0 && next.site.c < terreno[0].size());
+      
+      if (f_dentro && c_dentro && terreno[next.site.f][next.site.c] == 'D')
+        next.zapatillas = true;
+
+      break;
+
+    case TURN_SR:
+      next.site.brujula = (Orientacion) ((next.site.brujula+1)%8);
+      break;
+
+    case TURN_SL:
+      next.site.brujula = (Orientacion) ((next.site.brujula+7)%8);
+      break;
+  }
+
+  return next;
+}
+
+
+bool ComportamientoIngeniero::Find (const NodoI & st, const list<NodoI> &lista){
+  auto it = lista.begin();
+
+  while (it != lista.end() and !((*it) == st)){
+    it++;
+  }
+
+  return (it != lista.end());
+}
+
+list<Action> ComportamientoIngeniero::B_Anchura_V2(const EstadoI &inicio, const EstadoI &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura){
+  
+  queue<NodoI> frontier;
+  set<EstadoI> explored; 
+  list<Action> path;
+
+  NodoI current_node;
+  current_node.estado = inicio;
+  
+  // Zapatillas iniciales
+  if (terreno[inicio.site.f][inicio.site.c] == 'D') {
+    current_node.estado.zapatillas = true;
+  }
+  
+  frontier.push(current_node);
+  explored.insert(current_node.estado);
+
+  while (!frontier.empty()){
+    current_node = frontier.front();
+    frontier.pop();
+
+    // Condicion de meta, compronamos
+    if (current_node.estado.site.f == final.site.f && current_node.estado.site.c == final.site.c) {
+      return current_node.secuencia; // devolvemos sec en caso de haber llegado a la meta
+    }
+
+    // Hijo JUMP, primera opción porque es lo mas "rentable" para llegar en menos pasos
+    if (CasillaAccesibleSalto(current_node.estado, terreno, altura)) {
+      NodoI child = current_node;
+      child.estado = applyT(JUMP, current_node.estado, terreno, altura);
+      if (explored.find(child.estado) == explored.end()) {
+        explored.insert(child.estado);
+        child.secuencia.push_back(JUMP); // Siempre 
+        frontier.push(child);
+      }
+    }
+
+    // Hijo WALK
+    if (CasillaAccesibleIngeniero(current_node.estado, terreno, altura)) {
+      NodoI child = current_node;
+      child.estado = applyT(WALK, current_node.estado, terreno, altura);
+      if (explored.find(child.estado) == explored.end()) {
+        explored.insert(child.estado);
+        child.secuencia.push_back(WALK);
+        frontier.push(child);
+      }
+    }
+
+    // Hijo TURN_SL
+    NodoI child_SL = current_node;
+    child_SL.estado = applyT(TURN_SL, current_node.estado, terreno, altura);
+    if (explored.find(child_SL.estado) == explored.end()) {
+      explored.insert(child_SL.estado);
+      child_SL.secuencia.push_back(TURN_SL);
+      frontier.push(child_SL);
+    }
+
+    // Hijo TURN_SR
+    NodoI child_SR = current_node;
+    child_SR.estado = applyT(TURN_SR, current_node.estado, terreno, altura);
+    if (explored.find(child_SR.estado) == explored.end()) {
+      explored.insert(child_SR.estado);
+      child_SR.secuencia.push_back(TURN_SR);
+      frontier.push(child_SR);
+    }
+  }
+
+  return path;
+}
+  
+
+void ComportamientoIngeniero::AnularMatriz(vector<vector<unsigned char>> &m){
+  for (int i = 0; i < m[0].size(); i++){
+    for (int j = 0; j < m.size(); j++){
+      m[i][j] = 0;
+    }
+  }
+}
+
+list<Action> ComportamientoIngeniero::CaminoDijkstra(const EstadoI& inicio, const EstadoI &final, const vector<vector<unsigned char>>& terreno, const vector<vector<unsigned char>>& altura) {
+  priority_queue<NodoI, vector<NodoI>, greater<NodoI>> frontier;
+  set<EstadoI> explored; // Guardamos estados ya procesados
+  
+  NodoI current;
+  current.estado = inicio;
+  current.coste = 0;
+  if (terreno[inicio.site.f][inicio.site.c] == 'D') current.estado.zapatillas = true;
+  
+  frontier.push(current);
+
+  while (!frontier.empty()) {
+      current = frontier.top();
+      frontier.pop();
+
+      // 1. CONDICIÓN DE SALIDA (VITAL): Comprobar meta AL SACAR de la cola
+      if (current.estado.site.f == final.site.f && current.estado.site.c == final.site.c) {
+          return current.secuencia;
+      }
+
+      // 2. Si ya hemos explorado este estado con un coste menor, saltamos
+      if (explored.find(current.estado) != explored.end()) continue;
+      explored.insert(current.estado);
+
+      // 3. Generar hijos (WALK, TURN_SR, TURN_SL)
+      vector<Action> acciones = {WALK, TURN_SR, TURN_SL};
+      for (Action a : acciones) {
+          if (a == WALK && !CasillaAccesibleIngeniero(current.estado, terreno, altura)) continue;
+
+          EstadoI nuevo = applyT(a, current.estado, terreno, altura);
+          
+          // Si pisamos zapatillas mentalmente, el estado se actualiza
+          if (a == WALK && terreno[nuevo.site.f][nuevo.site.c] == 'D') nuevo.zapatillas = true;
+
+          NodoI hijo;
+          hijo.estado = nuevo;
+          hijo.coste = current.coste + 1; // En Nivel 2 cada acción vale 1
+          hijo.secuencia = current.secuencia;
+          hijo.secuencia.push_back(a);
+
+          if (explored.find(hijo.estado) == explored.end()) {
+              frontier.push(hijo);
+          }
+      }
+  }
+  return list<Action>();
 }
 
 /**

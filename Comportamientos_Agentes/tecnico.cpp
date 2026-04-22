@@ -20,8 +20,8 @@ Action ComportamientoTecnico::think(Sensores sensores) {
     case 0: accion = ComportamientoTecnicoNivel_0(sensores); break;
     case 1: accion = ComportamientoTecnicoNivel_1(sensores); break;
     case 2: accion = ComportamientoTecnicoNivel_2(sensores); break;
-    case 3: accion = ComportamientoTecnicoNivel_E(sensores); break;
-    // case 3: accion = ComportamientoTecnicoNivel_3(sensores); break;
+    // case 3: accion = ComportamientoTecnicoNivel_E(sensores); break;
+    case 3: accion = ComportamientoTecnicoNivel_3(sensores); break;
     case 4: accion = ComportamientoTecnicoNivel_4(sensores); break;
     case 5: accion = ComportamientoTecnicoNivel_5(sensores); break;
     case 6: accion = ComportamientoTecnicoNivel_6(sensores); break;
@@ -349,6 +349,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores) {
  * @return Acción a realizar.
  */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_2(Sensores sensores) {
+  // si molesta al ingeniero, debe moverse para no obstaculizarlo
   return IDLE;
 }
 
