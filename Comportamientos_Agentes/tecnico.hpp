@@ -25,16 +25,31 @@ struct EstadoT{
   bool operator == (const EstadoT &st) const{
     return (site==st.site && zapatillas==st.zapatillas);
   }
+
+  bool operator < (const EstadoT &st) const {
+    if (site.f < st.site.f) return true;
+    else if (site.f == st.site.f && site.c < st.site.c) return true;
+    else if (site.f == st.site.f && site.c == st.site.c && site.brujula < st.site.brujula) return true;
+    else if (site.f == st.site.f && site.c == st.site.c && site.brujula == st.site.brujula && zapatillas < st.zapatillas) return true;
+    else return false;
+  }
 };
 
 struct NodoT{
   EstadoT estado;
   list<Action> secuencia;
+  int coste;  // coste acumulado (energia)
+  int f;  // f=coste + heuristica
 
   bool operator==(const NodoT &node)const{
     return estado==node.estado;
   }
 
+  bool operator >(const NodoT &otro) const {
+    return f > otro.f;
+  }
+
+  
   bool operator<(const NodoT &node) const{
     if (estado.site.f < node.estado.site.f) return true;
     else if (estado.site.f == node.estado.site.f and estado.site.c < node.estado.site.c) return true;
@@ -44,8 +59,8 @@ struct NodoT{
     node.estado.site.brujula and estado.zapatillas < node.estado.zapatillas) return true;
     else return false;
   }
+    
 };
-
 
 class ComportamientoTecnico : public Comportamiento {
 public:
@@ -176,6 +191,10 @@ EstadoT NextCasillaTecnico(const EstadoT &st);
  */
 list<Action> B_Anchura(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
 list<Action> B_Anchura_V2(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
+
+int CosteEnergiaT(Action accion, const EstadoT &origen, const EstadoT &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+int Heuristica(const EstadoT &actual, const EstadoT &meta);
+list<Action> AlgoritmoAEstrella(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura);
 
 protected:
   // =========================================================================

@@ -404,7 +404,42 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_2(Sensores sensores) {
  * @return Acción a realizar.
  */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores) {
-  return IDLE;
+  Action accion = IDLE;
+
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+  if (!hayPlan){
+    // Invocar al metodo de busqueda
+    EstadoT inicio, fin;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tengo_zapatillas;
+
+    fin.site.f = sensores.BelPosF;
+    fin.site.c = sensores.BelPosC;
+    
+    plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
+    VisualizaPlan(inicio.site,plan);
+    hayPlan = plan.size() != 0;
+  }
+
+  if (hayPlan && plan.size()>0){
+    accion = plan.front();
+
+    if (accion == WALK && sensores.agentes[2] == 'i')
+      return IDLE;
+    
+    plan.pop_front();
+  }
+
+  if (plan.size()==0){
+    hayPlan = false;
+  }
+
+  return accion;
 }
 // Para el nivel 3 usaremos la busqueda de coste uniforme
 
@@ -443,6 +478,141 @@ list<Action> AvanzaSaltosDeCaballo(){
   secuencia.push_back(TURN_SR);
   secuencia.push_back(WALK);
   return secuencia;
+}
+
+// Método para calcular cual será el coste total de una acción teniendo en cuenta
+// a el tipo de casilla y que tipo de acción realiza
+int ComportamientoTecnico::CosteEnergiaT(Action accion, const EstadoT &origen, const EstadoT &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura) {
+  int coste = 0;
+  unsigned char t_origen = terreno[origen.site.f][origen.site.c]; // Ojo: el coste depende del ORIGEN
+  
+  if (accion == WALK) {
+    // Coste base por terreno y WALK
+    if (t_origen == 'A') coste = 60;
+    else if (t_origen == 'H') coste = 6;
+    else if (t_origen == 'S') coste = 3;
+    else return 1; // Camino, Muro, Precipicio, Bosque, etc. (aunque algunas no se puedan pisar, pon el default)
+    // Hacemos return porque no hay que sumarle coste de desnivel
+    
+    // 2. Modificador por desnivel (Solo en WALK)
+    int alt_origen = (int)altura[origen.site.f][origen.site.c];
+    int alt_destino = (int)altura[destino.site.f][destino.site.c];
+    
+    if (alt_destino > alt_origen) coste += 5;      // Subida
+    else if (alt_destino < alt_origen) coste -= 2; // Bajada
+  } 
+  else if (accion == TURN_SL || accion == TURN_SR) {
+    // Los giros no tienen modificador de altura
+    if (t_origen == 'A') coste = 5;
+    else if (t_origen == 'H') coste = 2;
+    else if (t_origen == 'S') coste = 1;
+    else coste = 1;
+  } 
+  else if(accion == JUMP){  // NOTA: NO SIRVE PARA TECNICO PERO PARA FUTUROS NIVELES QUIZAS ME SIRVE
+    // Coste base por terreno y WALK
+    if (t_origen == 'A') coste = 90;
+    else if (t_origen == 'H') coste = 10;
+    else if (t_origen == 'S') coste = 4;
+    else coste = 3; // Camino, Sendero, Muro, Precipicio, Bosque, etc. (aunque algunas no se puedan pisar, pon el default) bosque con zapatillas ?????
+    
+    // 2. Modificador por desnivel (Solo en WALK)
+    int alt_origen = (int)altura[origen.site.f][origen.site.c];
+    int alt_destino = (int)altura[destino.site.f][destino.site.c];
+    
+    if (alt_destino > alt_origen) coste += 5;      // Subida
+    else if (alt_destino < alt_origen) coste -= 2; // Bajada
+  }
+  
+  return coste;
+}
+
+// Usamos en vez de la heuristica de la Distancia Mínima de Manhattan vista en clase de practicas
+// la heuristica de Chebyshev que tambien tiene en cuenta diagonales
+// Este valor h(n) estima la distancia hasta la meta y se sumará al coste acumulado g(n)
+// para obtener el valor total f(n) con el que se ordenará el nodo en el algoritmo A*
+int ComportamientoTecnico::Heuristica(const EstadoT &actual, const EstadoT &meta) {
+  // Usamos Chebyshev porque el agente puede moverse en las 8 direcciones (diagonales)
+  return std::max(abs(actual.site.f - meta.site.f), abs(actual.site.c - meta.site.c));
+}
+
+list<Action> ComportamientoTecnico::AlgoritmoAEstrella(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura){
+  // Nodos por visitar
+  priority_queue<NodoT, vector<NodoT>, std::greater<NodoT>> abierta; // añadir para que sea de menor a mayor, operador <
+  
+  // Nodos ya visitados
+  set<EstadoT> cerrada;
+
+  NodoT primero;
+  primero.estado = inicio;
+
+  if (terreno[inicio.site.f][inicio.site.c] == 'D') {
+    primero.estado.zapatillas = true; // comprobamos zapatillas 
+  }
+
+  primero.coste = 0;
+  primero.f = primero.coste + Heuristica(inicio, final);
+  abierta.push(primero);
+
+
+  while (!abierta.empty()){
+    NodoT current_node = abierta.top();
+    abierta.pop();
+
+    if (current_node.estado.site.f == final.site.f && current_node.estado.site.c == final.site.c){
+      return current_node.secuencia;
+    }
+
+    if (cerrada.find(current_node.estado) != cerrada.end()){  // Si ya estaba añadido
+        continue; // pasamos a la sig iteracion sin añadirlo
+    }
+    cerrada.insert(current_node.estado); // si no estaba añadido, lo añadimos y calculamos los hijos
+
+    // Generamos ahora a los hijos del nodo
+    // WALK
+    if (CasillaAccesibleTecnico(current_node.estado, terreno, altura)){
+      NodoT walk = current_node;
+      walk.estado = applyT(WALK, current_node.estado, terreno, altura);
+
+      if (terreno[walk.estado.site.f][walk.estado.site.c] == 'D') {
+        walk.estado.zapatillas = true;
+      }
+
+      if (cerrada.find(walk.estado) == cerrada.end()){
+        walk.coste = current_node.coste + CosteEnergiaT(WALK, current_node.estado, walk.estado, terreno, altura);
+        walk.f = walk.coste + Heuristica(walk.estado, final);
+        walk.secuencia.push_back(WALK);
+        abierta.push(walk);
+      }
+    }
+
+    // TURN_SL
+    NodoT sl = current_node;
+    sl.estado = applyT(TURN_SL, current_node.estado, terreno, altura);
+    
+    if (cerrada.find(sl.estado) == cerrada.end()){
+      sl.coste = current_node.coste + CosteEnergiaT(TURN_SL, current_node.estado, sl.estado, terreno, altura);
+      sl.f = sl.coste + Heuristica(sl.estado, final);
+
+      sl.secuencia.push_back(TURN_SL);
+      abierta.push(sl); // Lo añadimos a la lista abierta que es la que luego "investigamos"
+    }
+
+    // TURN_SR
+    NodoT sr = current_node;
+    sr.estado = applyT(TURN_SR, current_node.estado, terreno, altura);
+    
+    if (cerrada.find(sr.estado) == cerrada.end()){
+      sr.coste = current_node.coste + CosteEnergiaT(TURN_SR, current_node.estado, sr.estado, terreno, altura);
+      sr.f = sr.coste + Heuristica(sr.estado, final);
+
+      sr.secuencia.push_back(TURN_SR);
+      abierta.push(sr); 
+    }
+  }
+
+  // Si la cola se vacía y no hemos salido, es decir, no hay solucion, entonces
+  list<Action> path_vacio;
+  return path_vacio; // devolvemos lista de acciones vacía.
 }
 
 /**
@@ -514,14 +684,21 @@ EstadoT ComportamientoTecnico::NextCasillaTecnico(const EstadoT &st){
   return siguiente;
 }
 
-bool ComportamientoTecnico::CasillaAccesibleTecnico(const EstadoT &st, const vector<vector<unsigned char>> &terreno, const
-  vector<vector<unsigned char>> &altura){
+bool ComportamientoTecnico::CasillaAccesibleTecnico(const EstadoT &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura){
   
   EstadoT next = NextCasillaTecnico(st);
+  
+  // Comprobar que no nos salimos del mapa
+  if (next.site.f < 0 || next.site.f >= terreno.size() || 
+    next.site.c < 0 || next.site.c >= terreno[0].size()) {
+    return false;
+  }
+
   bool check1 = false, check2 = false, check3 = false;
   check1 = terreno[next.site.f][next.site.c] != 'P' and terreno[next.site.f][next.site.c] != 'M';
   check2 = terreno[next.site.f][next.site.c] != 'B' or (terreno[next.site.f][next.site.c] == 'B' and st.zapatillas);
-  check3 = abs(altura[next.site.f][next.site.c] - altura[st.site.f][st.site.c]) <= 1;
+  
+  check3 = abs((int)altura[next.site.f][next.site.c] - (int)altura[st.site.f][st.site.c]) <= 1;
   
   return check1 and check2 and check3;
 }
