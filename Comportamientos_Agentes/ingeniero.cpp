@@ -988,30 +988,31 @@ bool ComportamientoIngeniero::CasillaAccesibleIngeniero(const EstadoI &st, const
   return false;
 }
 
-bool ComportamientoIngeniero::CasillaAccesibleSalto(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura) {
-  //Casilla intermedia debe ser transitable (que se pueda caminar)
-  if (!CasillaAccesibleIngeniero(st, terreno, altura)) return false;
+bool ComportamientoIngeniero::CasillaAccesibleSalto(const EstadoI &st, 
+  const vector<vector<unsigned char>> &terreno, 
+  const vector<vector<unsigned char>> &altura) {
 
-  // Casilla destino 
+  // Casilla intermedia: solo comprobar tipo, NO altura
   EstadoI intermedio = applyT(WALK, st, terreno, altura);
-  EstadoI destino = applyT(JUMP, st, terreno, altura); // Simulamos 2 pasos (salto)
+  if (intermedio.site.f < 0 || intermedio.site.f >= (int)terreno.size() ||
+      intermedio.site.c < 0 || intermedio.site.c >= (int)terreno[0].size()) return false;
   
-  // Comprobamos limites para segmentation 
-  if (destino.site.f < 0 || destino.site.f >= terreno.size() || destino.site.c < 0 || destino.site.c >= terreno[0].size()) return false;
-  
-  unsigned char t = terreno[destino.site.f][destino.site.c];
-  if (t == 'P' || t == 'M' || t == 'B') return false; // Intransitables son precipicio, muro y bosque
-  
-  // Validamos diferencia de altura entre mitad y destino
-  int dif_caida = abs((int)altura[destino.site.f][destino.site.c] - (int)altura[intermedio.site.f][intermedio.site.c]);
-  if (!st.zapatillas && dif_caida > 1) return false;
-  if (st.zapatillas && dif_caida > 2) return false;
+  unsigned char ti = terreno[intermedio.site.f][intermedio.site.c];
+  if (ti == 'P' || ti == 'M' || ti == 'B') return false;
 
-  // La diferencia de altura se calcula entre el INICIO y DESTINO
-  int dif = abs((int)altura[destino.site.f][destino.site.c] - (int)altura[st.site.f][st.site.c]);
-  if ((!st.zapatillas && dif <= 1) || (st.zapatillas && dif <= 2)) return true;
-  
-  return false;
+  // Casilla destino: tipo y diferencia de altura respecto al INICIO
+  EstadoI destino = applyT(JUMP, st, terreno, altura);
+  if (destino.site.f < 0 || destino.site.f >= (int)terreno.size() ||
+      destino.site.c < 0 || destino.site.c >= (int)terreno[0].size()) return false;
+
+  unsigned char td = terreno[destino.site.f][destino.site.c];
+  if (td == 'P' || td == 'M' || td == 'B') return false;
+
+  // Diferencia de altura entre INICIO y DESTINO FINAL
+  int dif = abs((int)altura[destino.site.f][destino.site.c] - 
+                (int)altura[st.site.f][st.site.c]);
+  int maxDif = st.zapatillas ? 2 : 1;
+  return dif <= maxDif;
 }
 
 
