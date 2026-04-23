@@ -670,13 +670,10 @@ list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inici
         if (alt_final != current_node.estado.altura && alt_final != current_node.estado.altura - 1)
           continue; // Podamos, descartamos el hijo
 
-        // if (alt_final > current_node.estado.altura) continue; // viola gravedad
-        // if (alt_final < current_node.estado.altura - 1) continue; // diferencia > 1, ilegal
-
         char casilla = terreno[next_f][next_c];
 
-        // Agua no permite ni DIG ni RAISE
-        if (casilla == 'A' && op != 0) continue;
+        // Agua y 'U' y casilla_ini? no permite ni DIG ni RAISE
+        if ((casilla == 'A') && op != 0 ) continue;
 
         // Comprobamos si el imp ecologico de la op supera al umbral
         int impacto = ImpactoEcologicoTub(op, casilla);
