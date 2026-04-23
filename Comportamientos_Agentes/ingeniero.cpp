@@ -476,7 +476,35 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores)
 {
-  return IDLE;
+  list<Paso> pasos;
+
+  if (!hayPlan){
+    // Invocar al metodo de busqueda
+    EstadoTub inicio, fin;
+    inicio.f = sensores.BelPosF;
+    inicio.c = sensores.BelPosC;
+    inicio.altura = (int)mapaCotas[inicio.f][inicio.c];
+
+    // Buscamos las casillas de Tratamiento de Residuos
+    vector<pair<int, int>> plantas;
+    for (int f = 0; f < mapaResultado.size(); f++) {
+        for (int c = 0; c < mapaResultado[f].size(); c++) {
+            if (mapaResultado[f][c] == 'U') {
+              plantas.push_back({f, c});
+            }
+        }
+    }
+    
+    pasos = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas);
+    
+    hayPlan = pasos.size() != 0;
+  }
+
+  if (pasos.size() > 0){
+    VisualizaRedTuberias(pasos);  
+  }
+
+  return IDLE; // el agente no hace nada tras calcular y mostrar el plan de pasos
 }
 
 /**
@@ -499,6 +527,78 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
   return IDLE;
 }
 
+
+// Heuristica para la eleccion de tuberias, usamos la distancia de manhattan ya que 
+// ahora si que solo se pueden usar orientaciones ortogonales (norte,sur,este,oeste)
+int ComportamientoIngeniero::HeuristicaTuberia(int f, int c, const vector<pair<int, int>> &plantas) {
+  int min_dist = 999999;
+
+  for (auto p : plantas) {
+    // Distancia Manhattan pura (para tuberías es ideal porque solo van en cruz)
+    int dist = abs(f - p.first) + abs(c - p.second);
+    if (dist < min_dist) {
+      min_dist = dist;
+    }
+  }
+
+  return min_dist; // Devolvemos la distancia a la planta más óptima
+}
+
+// Método para calcular el coste de ENERGÍA de alterar/instalar en una casilla
+int ComportamientoIngeniero::CosteEnergiaTub(int op, unsigned char t_destino) {
+  int coste = 0;
+  
+  if (op == 0) { // INSTALL normal (sin alterar terreno)
+    if (t_destino == 'A') coste = 60;
+    else if (t_destino == 'H') coste = 6;
+    else if (t_destino == 'S') coste = 3;
+    else coste = 1; 
+  } 
+  else if (op == -1){ // DIG
+    if (t_destino == 'H') coste = 65;
+    else if (t_destino == 'S') coste = 40;
+    else if (t_destino == 'C' || t_destino == 'U') coste = 25;
+    else coste = 50;
+  }
+  else if (op == 1){ // RAISE
+    if (t_destino == 'H') coste = 55;
+    else if (t_destino == 'S') coste = 30;
+    else if (t_destino == 'C' || t_destino == 'U') coste = 10;
+    else coste = 40;  
+  }
+  
+  return coste;
+}
+
+int ComportamientoIngeniero::ImpactoEcologicoTub(int op, unsigned char t_destino) {
+  int impacto = 0;
+  
+  if (op == 0) { // INSTALL
+    if (t_destino == 'A') impacto = 50;
+    else if (t_destino == 'H') impacto = 45;
+    else if (t_destino == 'S') impacto = 25;
+    else if (t_destino = 'C' || t_destino == 'U') impacto = 15;
+    else impacto = 30;
+  } 
+  else if (op == -1){ // DIG
+    if (t_destino == 'H') impacto = 65;
+    else if (t_destino == 'S') impacto = 40;
+    else if (t_destino = 'C' || t_destino == 'U') impacto = 25;
+    else impacto = 50;
+  } 
+  else if (op == 1){ // RAISE
+    if (t_destino == 'H') impacto = 55;
+    else if (t_destino == 'S') impacto = 30;
+    else if (t_destino = 'C' || t_destino == 'U') impacto = 10;
+    else impacto = 40;
+  }
+  
+  return impacto;
+}
+
+list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inicio,  const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura){
+  // Por completar una vez este todo lo necesario hecho bien
+}
 
 /**
  * @brief Determina si casilla viable por altura

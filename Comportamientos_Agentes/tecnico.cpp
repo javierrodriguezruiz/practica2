@@ -484,17 +484,17 @@ list<Action> AvanzaSaltosDeCaballo(){
 // a el tipo de casilla y que tipo de acción realiza
 int ComportamientoTecnico::CosteEnergiaT(Action accion, const EstadoT &origen, const EstadoT &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura) {
   int coste = 0;
-  unsigned char t_origen = terreno[origen.site.f][origen.site.c]; // Ojo: el coste depende del ORIGEN
+  unsigned char t_origen = terreno[origen.site.f][origen.site.c]; // El coste depende del ORIGEN
   
   if (accion == WALK) {
     // Coste base por terreno y WALK
     if (t_origen == 'A') coste = 60;
     else if (t_origen == 'H') coste = 6;
     else if (t_origen == 'S') coste = 3;
-    else return 1; // Camino, Muro, Precipicio, Bosque, etc. (aunque algunas no se puedan pisar, pon el default)
+    else return 1; // Camino, Muro, Precipicio, Bosque, etc.
     // Hacemos return porque no hay que sumarle coste de desnivel
     
-    // 2. Modificador por desnivel (Solo en WALK)
+    // Modificador por desnivel
     int alt_origen = (int)altura[origen.site.f][origen.site.c];
     int alt_destino = (int)altura[destino.site.f][destino.site.c];
     
@@ -515,7 +515,7 @@ int ComportamientoTecnico::CosteEnergiaT(Action accion, const EstadoT &origen, c
     else if (t_origen == 'S') coste = 4;
     else coste = 3; // Camino, Sendero, Muro, Precipicio, Bosque, etc. (aunque algunas no se puedan pisar, pon el default) bosque con zapatillas ?????
     
-    // 2. Modificador por desnivel (Solo en WALK)
+    // Modificador por desnivel
     int alt_origen = (int)altura[origen.site.f][origen.site.c];
     int alt_destino = (int)altura[destino.site.f][destino.site.c];
     
