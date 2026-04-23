@@ -537,7 +537,7 @@ int ComportamientoTecnico::Heuristica(const EstadoT &actual, const EstadoT &meta
 
 list<Action> ComportamientoTecnico::AlgoritmoAEstrella(const EstadoT &inicio, const EstadoT &final, const vector<vector<unsigned char>> &terreno, vector<vector<unsigned char>> &altura){
   // Nodos por visitar
-  priority_queue<NodoT, vector<NodoT>, std::greater<NodoT>> abierta; // añadir para que sea de menor a mayor, operador <
+  priority_queue<NodoT, vector<NodoT>, std::greater<NodoT>> abierta; //ordenados orden ascendente
   
   // Nodos ya visitados
   set<EstadoT> cerrada;

@@ -49,33 +49,13 @@ struct NodoI {
     else return false;
   }
 };
-
+/*
 struct Paso{
   int fil;
   int col;
   int op; //-1 Hacer un DIG, 0 dejarla como está, 1 RAISE
 };
-
-struct NodoTub{
-  EstadoTub estado;
-  list<Paso> secuencia;
-
-  int ecologico;  // impacto ecologico acumulado (limitante a la hora de planear)
-  int coste;  // coste acumulado en el nodo
-  int f; // Valor del nodo en el alg A* (coste + heuristica)
-
-  bool operator > (const NodoTub &otro) const {
-    if (f == otro.f) {
-      return coste < otro.coste; // f igual: priorizamos el que lleve más tubería construida
-    }
-    return f > otro.f;
-  }
-
-  bool operator == (const NodoTub &node) const {
-    return estado == node.estado;
-  }
-};
-
+*/
 struct EstadoTub{
   int f; // fila
   int c; // columna
@@ -90,6 +70,27 @@ struct EstadoTub{
     else if (f == st.f && c < st.c) return true;
     else if (f == st.f && c == st.c && altura < st.altura) return true;
     else return false;
+  }
+};
+
+struct NodoTub{
+  EstadoTub estado;
+  list<Paso> secuencia;
+
+  int longitud; // longitud de la tuberia, (coste para el A*) 
+  int ecologico;  // impacto ecologico acumulado (limitante a la hora de planear)
+  int energia;  // coste (energia) acumulada en el nodo
+  int f; // Valor del nodo en el alg A* (coste + heuristica)
+
+  bool operator > (const NodoTub &otro) const {
+    if (f == otro.f) {
+      return ecologico > otro.ecologico; // f igual: priorizamos menos impacto
+    }
+    return f > otro.f;
+  }
+
+  bool operator == (const NodoTub &node) const {
+    return estado == node.estado;
   }
 };
 
@@ -205,7 +206,9 @@ public:
 
   int ImpactoEcologicoTub(int op, unsigned char t_destino);
 
-  list<Paso> AlgoritmoAEstrellaTub(const EstadoTub &inicio, const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura);
+  bool CasillaAccesibleTuberia(int f, int c, const vector<vector<unsigned char>> &terreno);
+
+  list<Paso> AlgoritmoAEstrellaTub(const EstadoTub &inicio, const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, Sensores sensores);
 
 protected:
   // =========================================================================
