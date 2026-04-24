@@ -564,7 +564,7 @@ int ComportamientoIngeniero::CosteEnergiaTub(int op, unsigned char t_destino) {
     else if (t_destino == 'C' || t_destino == 'U') coste = 10;
     else coste = 40;  
   }
-  
+  // No hay coste adicional por altura
   return coste;
 }
 
@@ -610,7 +610,7 @@ list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inici
   priority_queue<NodoTub, vector<NodoTub>, std::greater<NodoTub>> abierta; //ordenados orden ascendente
   
   // Nodos ya visitados
-  set<EstadoTub> cerrada; // hacer set <int, int> para fila y columna ?
+  set<EstadoTub> cerrada;
 
   NodoTub primero;
   primero.estado = inicio;
