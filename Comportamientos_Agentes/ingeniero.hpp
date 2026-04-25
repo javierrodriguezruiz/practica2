@@ -50,11 +50,7 @@ struct NodoI {
   }
 };
 /*
-struct Paso{
-  int fil;
-  int col;
-  int op; //-1 Hacer un DIG, 0 dejarla como está, 1 RAISE
-};
+
 */
 struct EstadoTub{
   int f; // fila
@@ -82,25 +78,39 @@ struct NodoTub{
   int energia;  // coste (energia) acumulada en el nodo
   int f; // Valor del nodo en el alg A* (coste + heuristica)
 
+  
   bool operator > (const NodoTub &otro) const {
+    if (f == otro.f && ecologico == otro.ecologico)
+      return longitud > otro.longitud;
+
     if (f == otro.f) {
       return ecologico > otro.ecologico; // f igual: priorizamos menos impacto
     }
+
     return f > otro.f;
   }
+
+/*
+  bool operator > (const NodoTub &otro) const {
+
+    if (f == otro.f)
+      return longitud > otro.longitud;
+
+    return f > otro.f;
+  }
+*/
 
   bool operator == (const NodoTub &node) const {
     return estado == node.estado;
   }
 };
 
-
 class ComportamientoIngeniero : public Comportamiento {
 public:
   // =========================================================================
   // CONSTRUCTORES
   // =========================================================================
-  
+
   /**
    * @brief Constructor para niveles 0, 1 y 6 (sin mapa completo)
    * @param size Tamaño del mapa (si es 0, se inicializa más tarde)
