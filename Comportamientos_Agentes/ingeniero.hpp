@@ -124,6 +124,8 @@ public:
     giros_pendientes=0;
     hayPlan=false;
     plan=list<Action>();
+    estado_actual = PLANIFICANDO;
+
   }
 
   /**
@@ -134,6 +136,16 @@ public:
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR, 
                          std::vector<std::vector<unsigned char>> mapaC): 
                          Comportamiento(mapaR, mapaC) {
+    // Inicializar Variables de Estado
+    tengo_zapatillas = false;
+    last_action = IDLE;
+    giros_consecutivos = 0;
+    turnos_aburrido=0;
+    giros_pendientes=0;
+    hayPlan=false;
+    plan=list<Action>();
+    estado_actual = PLANIFICANDO;
+    tramo_actual = 0;
   }
   
 
@@ -361,6 +373,21 @@ private:
   // Nivel 2
   bool hayPlan;
   list<Action> plan;
+
+  // Nivel 5
+  // Enum para nuestra máquina de estados
+  enum EstadoConstruccion { 
+    PLANIFICANDO, 
+    ASIGNANDO_DESTINO,  // va a la casilla del tecnico y lo llama
+    VIAJANDO,           // va a su casilla objetivo i-1
+    PREPARANDO_TERRENO, 
+    ALINEANDO, 
+    INSTALANDO 
+  };
+
+  EstadoConstruccion estado_actual;
+  vector<Paso> plan_tuberia; // Usamos un vector en vez de list para acceder fácil con [i]
+  int tramo_actual;      // Tramo por el que vamos (i)
 };
 
 #endif

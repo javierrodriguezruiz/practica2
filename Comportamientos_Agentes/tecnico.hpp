@@ -92,6 +92,9 @@ public:
 
     hayPlan = false;
     tengo_zapatillas=false;
+    giros_consecutivos = 0;
+    turnos_aburrido = 0;
+    giros_pendientes = 0;
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport): Comportamiento(comport) {}
@@ -305,6 +308,18 @@ private:
   // NIVEL E
   bool hayPlan;
   list<Action> plan;
+
+  // Nivel 5
+  // Enum para el técnico
+  enum EstadoTecnico { 
+    ESPERANDO_ORDEN, 
+    VIAJANDO, 
+    ALINEANDO, 
+    INSTALANDO 
+  };
+
+  EstadoTecnico estado_actual_tec = ESPERANDO_ORDEN;
+  ubicacion destino; // Casilla a la que el ingeniero le ha dicho que vaya
 };
 
 #endif
