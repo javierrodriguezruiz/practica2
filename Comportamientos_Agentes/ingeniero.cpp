@@ -519,6 +519,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
   switch (estado_actual)
   {
   case PLANIFICANDO:
+  {
     if (plan_tuberia.empty()){
       EstadoTub inicio;
       inicio.f = sensores.BelPosF;
@@ -543,8 +544,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
     estado_actual = ASIGNANDO_DESTINO; // Pasamos al siguiente estado
     break;
-  
+  }
   case ASIGNANDO_DESTINO:
+  {
     int dest_f = plan_tuberia[tramo_actual + 1].fil;
     int dest_c = plan_tuberia[tramo_actual + 1].col;
     int altura_dest = (int)mapaCotas[dest_f][dest_c];
@@ -573,9 +575,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     }
 
     break;
-  
-    case VIAJANDO:
-    
+  }
+  case VIAJANDO:
+  {
+    // Codigo
+    break;
+  }  
 
   }
 
@@ -678,8 +683,122 @@ bool ComportamientoIngeniero::CasillaAccesibleTuberia(int f, int c, const vector
   return true;
 }
 
-/***********************VERSION GITHUB *****************************/
+#include <map>
 
+list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inicio, const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, Sensores sensores) {
+  
+  priority_queue<NodoTub, vector<NodoTub>, std::greater<NodoTub>> abierta;
+  
+  // MEMORIA INTELIGENTE: Guarda el impacto mínimo alcanzado en cada (f, c, h)
+  map<EstadoTub, int> memoria_eco;
+
+  unsigned char casilla_ini = terreno[inicio.f][inicio.c];
+  int alt_original_ini = (int)altura[inicio.f][inicio.c];
+
+  // --- NODOS INICIALES (Casilla de la Belkanita) ---
+  for (int op = -1; op <= 1; op++) {
+    if (casilla_ini == 'A' && op != 0) continue;
+    if (op == 1 && alt_original_ini >= 9) continue;
+    if (op == -1 && alt_original_ini <= 1) continue;
+
+    // Al inicio solo pagamos la modificación del terreno
+    int impacto_ini = (op != 0) ? ImpactoEcologicoTub(op, casilla_ini) : 0;
+    int energia_ini = (op != 0) ? CosteEnergiaTub(op, casilla_ini) : 0;
+
+    if (impacto_ini > sensores.max_ecologico) continue;
+
+    NodoTub primero;
+    primero.estado = {inicio.f, inicio.c, alt_original_ini + op};
+    primero.longitud = 0;
+    primero.energia = energia_ini;
+    primero.ecologico = impacto_ini;
+    primero.f = primero.longitud + HeuristicaTuberia(inicio.f, inicio.c, plantas);
+    primero.secuencia.push_back({inicio.f, inicio.c, op});
+
+    abierta.push(primero);
+  }
+
+  while (!abierta.empty()) {
+    NodoTub current = abierta.top();
+    abierta.pop();
+
+    // Victoria: llegamos a una 'U'
+    for (const auto &p : plantas) {
+      if (current.estado.f == p.first && current.estado.c == p.second) {
+        return current.secuencia;
+      }
+    }
+
+    // PODA POR DOMINANCIA ECOLÓGICA
+    // Si ya pasamos por aquí con un impacto igual o menor, descartamos esta rama
+    if (memoria_eco.count(current.estado) && memoria_eco[current.estado] <= current.ecologico) {
+        continue;
+    }
+    memoria_eco[current.estado] = current.ecologico;
+
+    int df[] = {-1, 1, 0, 0}, dc[] = {0, 0, 1, -1};
+    for (int dir = 0; dir < 4; dir++) {
+      int next_f = current.estado.f + df[dir];
+      int next_c = current.estado.c + dc[dir];
+
+      if (!CasillaAccesibleTuberia(next_f, next_c, terreno)) continue;
+
+      for (int op = -1; op <= 1; op++) {
+        int alt_dest_orig = (int)altura[next_f][next_c];
+        int alt_dest_final = alt_dest_orig + op;
+
+        // Regla de consistencia de altura h_next == h_curr o h_next == h_curr - 1
+        if (alt_dest_final != current.estado.altura && alt_dest_final != current.estado.altura - 1) continue;
+
+        unsigned char t_origen = terreno[current.estado.f][current.estado.c];
+        unsigned char t_destino = terreno[next_f][next_c];
+
+        // Reglas de Agua y Plantas
+        if ((t_destino == 'A') && op != 0) continue;
+        if (op == 1 && alt_dest_orig >= 9) continue;
+        if (op == -1 && alt_dest_orig <= 1) continue;
+
+        // ===========================================================
+        // FÓRMULA DE PARES DEL COMPAÑERO
+        // ===========================================================
+        // Impacto = INSTALL(origen) + INSTALL(destino) + MOD(destino)
+        int i_paso = ImpactoEcologicoTub(0, t_origen) + ImpactoEcologicoTub(0, t_destino);
+        int e_paso = CosteEnergiaTub(0, t_origen) + CosteEnergiaTub(0, t_destino);
+
+        if (op != 0) {
+            i_paso += ImpactoEcologicoTub(op, t_destino);
+            e_paso += CosteEnergiaTub(op, t_destino);
+        }
+        // ===========================================================
+
+        int n_impacto = current.ecologico + i_paso;
+        int n_energia = current.energia + e_paso;
+
+        if (n_impacto > sensores.max_ecologico || n_energia > sensores.energia) continue;
+
+        EstadoTub st_hijo = {next_f, next_c, alt_dest_final};
+
+        // Poda preventiva: si ya conocemos un camino mejor a este hijo, ni lo metemos
+        if (!memoria_eco.count(st_hijo) || memoria_eco[st_hijo] > n_impacto) {
+            NodoTub hijo;
+            hijo.estado = st_hijo;
+            hijo.longitud = current.longitud + 1;
+            hijo.energia = n_energia;
+            hijo.ecologico = n_impacto;
+            hijo.f = hijo.longitud + HeuristicaTuberia(next_f, next_c, plantas);
+            hijo.secuencia = current.secuencia;
+            hijo.secuencia.push_back({next_f, next_c, op});
+
+            abierta.push(hijo);
+        }
+      }
+    }
+  }
+  return list<Paso>();
+}
+
+/***********************VERSION GITHUB *****************************/
+/*
 list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inicio,  const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, Sensores sensores){
   // Nodos por visitar
   priority_queue<NodoTub, vector<NodoTub>, std::greater<NodoTub>> abierta; //ordenados orden ascendente
@@ -701,16 +820,24 @@ list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inici
 
     // Comprobamos el impacto ecológico
     int impacto = ImpactoEcologicoTub(op, casilla_ini);
+    // En caso de ser DIG o RAISE tambien añadimos el impacto de INSTALL
+    if (op != 0)
+      impacto += ImpactoEcologicoTub(0, casilla_ini); // añadimos impacto INSTALL
+
     if (impacto > sensores.max_ecologico) continue;
 
     // Comprobamos energia
     int coste = CosteEnergiaTub(op, casilla_ini);
+    // En caso de ser DIG o RAISE tambien añadimos el coste de INSTALL
+    if (op != 0)
+      coste += CosteEnergiaTub(0, casilla_ini);
+  
     if (coste > sensores.energia) continue;
 
     // Pasados los filtros, creamos el nodo inicial para esta operación
     int alt_final_ini = alt_original_ini + op;
     NodoTub primero;
-    primero.estado = {inicio.f, inicio.c, alt_final_ini};
+    primero.estado = {inicio.f, inicio.c, alt_final_ini, impacto};
     primero.longitud = 0;
     primero.energia = coste;
     primero.ecologico = impacto;
@@ -763,16 +890,21 @@ list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inici
         if (op == -1 && alt_original <= 1) continue;
 
         int impacto = ImpactoEcologicoTub(op, casilla);
+        // En caso de ser DIG o RAISE, tambien sumamos el impacto de install
+        if (op == -1 || op == 1)
+          impacto += ImpactoEcologicoTub(0, casilla);
         int nuevo_impacto = current_node.ecologico + impacto;
         if (nuevo_impacto > sensores.max_ecologico)
           continue;  
 
         int coste = CosteEnergiaTub(op, casilla);
+        if (op == -1 || op == 1)
+          coste +=CosteEnergiaTub(0, casilla);
         int nueva_energia = current_node.energia + coste;
         if (nueva_energia > sensores.energia)
           continue; 
 
-        EstadoTub st_hijo = {next_f, next_c, alt_final};
+        EstadoTub st_hijo = {next_f, next_c, alt_final, nuevo_impacto}; // cambio impacto por nuevo_impacto
 
         if (cerrada.find(st_hijo) == cerrada.end()){
           NodoTub hijo;
@@ -794,228 +926,8 @@ list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inici
 
   return list<Paso>(); 
 }
+  */
 
-  
-/*
-  list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inicio,  const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, Sensores sensores){
-  
-  priority_queue<NodoTub, vector<NodoTub>, std::greater<NodoTub>> abierta; 
-  
-  // ¡Cambiamos a NodoTub!
-  set<NodoTub> cerrada; 
-
-  unsigned char casilla_ini = terreno[inicio.f][inicio.c];
-  int alt_original_ini = (int)altura[inicio.f][inicio.c];
-
-  for (int op = -1; op <= 1; op++) {
-    if ((casilla_ini == 'A') && op != 0) continue;
-    if (op == 1 && alt_original_ini >= 9) continue;
-    if (op == -1 && alt_original_ini <= 1) continue;
-
-    int impacto = ImpactoEcologicoTub(op, casilla_ini);
-    if (impacto > sensores.max_ecologico) continue;
-
-    int coste = CosteEnergiaTub(op, casilla_ini);
-    if (coste > sensores.energia) continue;
-
-    int alt_final_ini = alt_original_ini + op;
-    NodoTub primero;
-    primero.estado = {inicio.f, inicio.c, alt_final_ini};
-    primero.longitud = 0;
-    primero.energia = coste;
-    primero.ecologico = impacto;
-    primero.f = primero.longitud + HeuristicaTuberia(inicio.f, inicio.c, plantas);
-
-    Paso paso_ini = {inicio.f, inicio.c, op};
-    primero.secuencia.push_back(paso_ini);
-
-    abierta.push(primero);
-  }
-
-  while (!abierta.empty()){
-    NodoTub current_node = abierta.top();
-    abierta.pop();
-
-    for (int i = 0; i < plantas.size(); i++){ 
-      if (current_node.estado.f == plantas[i].first && current_node.estado.c == plantas[i].second){
-        return current_node.secuencia;
-      }
-    }
-
-    // Buscamos el nodo entero en cerrada
-    if (cerrada.find(current_node) != cerrada.end()){
-      continue; 
-    }
-    cerrada.insert(current_node);
-
-    int df[] = {-1, 1, 0, 0};
-    int dc[] = {0, 0, 1, -1}; 
-
-    for (int dir = 0; dir < 4; dir++){
-      int next_f = current_node.estado.f + df[dir];
-      int next_c = current_node.estado.c + dc[dir];
-
-      if (!CasillaAccesibleTuberia(next_f, next_c, terreno)) continue;
-
-      for (int op = -1; op <= 1; op++){
-        int alt_original = (int)altura[next_f][next_c];
-        int alt_final = alt_original + op; 
-
-        if (alt_final != current_node.estado.altura && alt_final != current_node.estado.altura - 1)
-          continue; 
-
-        char casilla = terreno[next_f][next_c];
-
-        if ((casilla == 'A') && op != 0 ) continue;
-        if (op == 1 && alt_original >= 9) continue;
-        if (op == -1 && alt_original <= 1) continue;
-
-        int impacto = ImpactoEcologicoTub(op, casilla);
-        int nuevo_impacto = current_node.ecologico + impacto;
-        if (nuevo_impacto > sensores.max_ecologico) continue;  
-
-        int coste = CosteEnergiaTub(op, casilla);
-        int nueva_energia = current_node.energia + coste;
-        if (nueva_energia > sensores.energia) continue; 
-
-        // Montamos el hijo entero ANTES de comprobar la cerrada
-        NodoTub hijo;
-        hijo.estado = {next_f, next_c, alt_final};
-        hijo.longitud = current_node.longitud + 1;
-        hijo.energia = nueva_energia;
-        hijo.ecologico = nuevo_impacto;
-        hijo.f = hijo.longitud + HeuristicaTuberia(next_f, next_c, plantas);
-  
-        hijo.secuencia = current_node.secuencia;
-        Paso nuevo = {next_f, next_c, op};
-        hijo.secuencia.push_back(nuevo);
-
-        // Si este nodo exacto (con esta ecología) no está en cerrada, pa' dentro
-        if (cerrada.find(hijo) == cerrada.end()){
-          abierta.push(hijo); 
-        }
-      }
-    }
-  }
-
-  return list<Paso>(); 
-}
-*/
-
-  
-  /*
-list<Paso> ComportamientoIngeniero::AlgoritmoAEstrellaTub(const EstadoTub &inicio,  const vector<pair<int, int>> &plantas, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, Sensores sensores){
-
-  // Nodos por visitar (min-heap por f; operator> definido en NodoTub)
-  priority_queue<NodoTub, vector<NodoTub>, std::greater<NodoTub>> abierta;
-
-  // Mapa que guarda la mejor longitud (g-score) conocida para cada estado
-  map<EstadoTub,int> mejorLongitud;
-
-  NodoTub primero;
-  primero.estado = inicio;
-  primero.longitud = 0;
-  primero.energia = 0;
-  primero.ecologico = 0;
-  primero.f = primero.longitud + HeuristicaTuberia(inicio.f, inicio.c, plantas);
-
-  Paso paso_ini = {inicio.f, inicio.c, 0};
-  primero.secuencia.push_back(paso_ini);
-
-  abierta.push(primero);
-  mejorLongitud[inicio] = 0; // mejor g para el inicio
-
-  while (!abierta.empty()){
-
-    NodoTub current_node = abierta.top();
-    abierta.pop();
-
-    // Si este nodo es obsoleto (existe mejor g conocido), lo descartamos
-    auto it_cur = mejorLongitud.find(current_node.estado);
-    if (it_cur != mejorLongitud.end() && current_node.longitud > it_cur->second)
-      continue;
-
-    // Si encontramos solucion, devolvemos secuencia
-    for (int i = 0; i < plantas.size(); i++){
-      if (current_node.estado.f == plantas[i].first && current_node.estado.c == plantas[i].second){
-        return current_node.secuencia;
-      }
-    }
-
-    // Expandimos los 4 hijos (N, S, E, O)
-    int df[] = {-1, 1, 0, 0};
-    int dc[] = {0, 0, 1, -1};
-
-    for (int dir = 0; dir < 4; dir++){
-
-      int next_f = current_node.estado.f + df[dir];
-      int next_c = current_node.estado.c + dc[dir];
-
-      // Comprobamos que dicha casilla sea transitable
-      if (!CasillaAccesibleTuberia(next_f, next_c, terreno)) continue;
-
-      // Probamos las 3 operaciones DIG (-1), INSTALL (0), RAISE (1)
-      for (int op = -1; op <= 1; op++){
-
-        int alt_original = (int)altura[next_f][next_c];
-        int alt_final = alt_original + op; // altura tras operacion
-
-        // La altura del nodo actual debe ser igual o superior en 1 unidad q la altura final
-        if (alt_final != current_node.estado.altura && alt_final != current_node.estado.altura - 1)
-          continue; // descartamos el hijo
-
-        char casilla = terreno[next_f][next_c];
-
-        // Agua y 'U' no permiten DIG ni RAISE
-        if ((casilla == 'A' || casilla == 'U') && op != 0) continue;
-
-        // Comprobamos impacto ecológico
-        int impacto = ImpactoEcologicoTub(op, casilla);
-        int nuevo_impacto = current_node.ecologico + impacto;
-        if (nuevo_impacto > sensores.max_ecologico)
-          continue;
-
-        // Comprobamos energia suficiente
-        int coste = CosteEnergiaTub(op, casilla);
-        int nueva_energia = current_node.energia + coste;
-        if (nueva_energia > sensores.energia)
-          continue;
-
-        // Creamos el estado hijo
-        EstadoTub st_hijo = {next_f, next_c, alt_final};
-        int nueva_long = current_node.longitud + 1;
-
-        // Si no existe mejor g o hemos encontrado una mejor longitud, encolamos
-        auto it = mejorLongitud.find(st_hijo);
-        if (it == mejorLongitud.end() || nueva_long < it->second) {
-
-          mejorLongitud[st_hijo] = nueva_long;
-
-          NodoTub hijo;
-          hijo.estado = st_hijo;
-          hijo.longitud = nueva_long;
-          hijo.energia = nueva_energia;
-          hijo.ecologico = nuevo_impacto;
-          hijo.f = hijo.longitud + HeuristicaTuberia(next_f, next_c, plantas);
-
-          // Secuencia: la anterior + nuevo paso
-          hijo.secuencia = current_node.secuencia;
-          Paso nuevo = {next_f, next_c, op};
-          hijo.secuencia.push_back(nuevo);
-
-          abierta.push(hijo);
-        }
-
-      } // for op
-
-    } // for dir
-
-  } // while
-
-  return list<Paso>();
-}
-
-*/
 
 /**
  * @brief Determina si casilla viable por altura
@@ -1887,3 +1799,6 @@ void ComportamientoIngeniero::VisualizaRedTuberias(const list<Paso> &plan)
     it++;
   }
 }
+
+// Meter el coste de install cuando hago dig y raise tambien 
+// mirar en monitor.cpp para ver como lo corrigen
