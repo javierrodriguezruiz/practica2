@@ -53,8 +53,8 @@ struct NodoI {
 struct EstadoTub{
   int f; // fila
   int c; // columna
-  int altura; // La altura FINAL de la tubería en esta casilla (cota del mapa + op)
-  int eco;
+  int altura; // La altura final de la tubería en dicha casilla (cota + op)
+  int eco; // impacto ecologico
 
   bool operator == (const EstadoTub &st) const {
     return (f == st.f && c == st.c && altura == st.altura && eco == st.eco);
@@ -73,8 +73,8 @@ struct NodoTub{
   list<Paso> secuencia;
 
   int longitud; // longitud de la tuberia, (coste para el A*) 
-  int ecologico;  // impacto ecologico acumulado (limitante a la hora de planear)
-  int energia;  // coste (energia) acumulada en el nodo
+  int ecologico;  // impacto ecologico acumulado
+  int energia;  // coste de energia acumulada en el nodo
   int f; // Valor del nodo en el alg A* (coste + heuristica)
   
   bool operator > (const NodoTub &otro) const {
@@ -82,56 +82,17 @@ struct NodoTub{
       return longitud > otro.longitud;
 
     if (f == otro.f) {
-      return ecologico > otro.ecologico; // f igual: priorizamos menos impacto
+      return ecologico > otro.ecologico; // f igual, entonces priorizamos menor impacto
     }
 
     return f > otro.f;
   }
-
-  
 
   bool operator == (const NodoTub &node) const {
     return estado == node.estado;
   }
 };
 
-
-/*
-struct EstadoTub {
-  int f; 
-  int c; 
-  int altura; 
-
-  bool operator == (const EstadoTub &st) const {
-    return (f == st.f && c == st.c && altura == st.altura);
-  }
-
-  bool operator < (const EstadoTub &st) const {
-    if (f != st.f) return f < st.f;
-    if (c != st.c) return c < st.c;
-    return altura < st.altura;
-  }
-};
-
-struct NodoTub {
-  EstadoTub estado;
-  list<Paso> secuencia;
-
-  int longitud;   // pasos dados
-  int ecologico;  // impacto acumulado (el limitante)
-  int energia;    // energía acumulada
-  int f;          // longitud + heurística
-
-  // Orden para la priority_queue (menor f primero)
-  bool operator > (const NodoTub &otro) const {
-    if (f != otro.f) return f > otro.f;
-    // Desempate: priorizamos el que haya avanzado más (está más cerca de meta)
-    if (longitud != otro.longitud) return longitud < otro.longitud;
-    // Último desempate: el más limpio
-    return ecologico > otro.ecologico;
-  }
-};
-*/
 
 class ComportamientoIngeniero : public Comportamiento {
 public:
