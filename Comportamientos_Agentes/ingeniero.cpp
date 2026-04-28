@@ -541,7 +541,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
     llamado_en_ini = false; 
     esperando_tecnico = true; 
     hayPlan = false; 
-    return IDLE; 
+    // return IDLE; 
   }
 
   // Condicion 3: Viajes 
