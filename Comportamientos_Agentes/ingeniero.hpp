@@ -113,7 +113,6 @@ public:
     giros_pendientes=0;
     hayPlan=false;
     plan=list<Action>();
-    estado_actual = PLANIFICANDO;
 
   }
 
@@ -133,8 +132,8 @@ public:
     giros_pendientes=0;
     hayPlan=false;
     plan=list<Action>();
-    estado_actual = PLANIFICANDO;
     tramo_actual = 0;
+    terreno_preparado = false;
   }
   
 
@@ -364,19 +363,11 @@ private:
   list<Action> plan;
 
   // Nivel 5
-  // Enum para nuestra máquina de estados
-  enum EstadoConstruccion { 
-    PLANIFICANDO, 
-    ASIGNANDO_DESTINO,  // va a la casilla del tecnico y lo llama
-    VIAJANDO,           // va a su casilla objetivo i-1
-    PREPARANDO_TERRENO, 
-    ALINEANDO, 
-    INSTALANDO 
-  };
-
-  EstadoConstruccion estado_actual;
   vector<Paso> plan_tuberia; // Usamos un vector en vez de list para acceder fácil con [i]
   int tramo_actual;      // Tramo por el que vamos (i)
+  bool terreno_preparado;
+  bool esperando_tecnico = false; // para saber si he avisado o no al tecnico en un tramo
+  bool esperando_install = false; // Para sincronizar el turno del motor
 };
 
 #endif

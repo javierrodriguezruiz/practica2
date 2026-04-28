@@ -309,17 +309,11 @@ private:
   bool hayPlan;
   list<Action> plan;
 
-  // Nivel 5
-  // Enum para el técnico
-  enum EstadoTecnico { 
-    ESPERANDO_ORDEN, 
-    VIAJANDO, 
-    ALINEANDO, 
-    INSTALANDO 
-  };
-
-  EstadoTecnico estado_actual_tec = ESPERANDO_ORDEN;
+  // Nivel 5;
   ubicacion destino; // Casilla a la que el ingeniero le ha dicho que vaya
+  bool tengo_orden = false;
+  int destino_c;
+  int destino_f;
 };
 
 #endif

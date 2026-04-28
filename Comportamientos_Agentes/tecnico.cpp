@@ -457,9 +457,303 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
+
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-  return IDLE;
+    
+    // Si el ingeniero hace COME, actualizamos todo
+    if (sensores.venpaca) {
+      destino_f = sensores.GotoF;
+      destino_c = sensores.GotoC;
+      tengo_orden = true; // Guardamos que tenemos algo que hacer
+      hayPlan = false;
+    }
+
+    // Si tenemos una orden activa
+    if (tengo_orden) {
+        
+      // Si todavia no hemos llegado a donde el ingeniero nos llamó
+      if (sensores.posF != destino_f || sensores.posC != destino_c) {
+        if (!hayPlan) { 
+          EstadoT inicio, fin;
+          inicio.site.f = sensores.posF;
+          inicio.site.c = sensores.posC;
+          inicio.site.brujula = sensores.rumbo;
+          inicio.zapatillas = tengo_zapatillas;
+          fin.site.f = destino_f;
+          fin.site.c = destino_c;
+          
+          plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
+          hayPlan = !plan.empty();
+        }
+        if (hayPlan && !plan.empty()) {
+          Action a = plan.front();
+          
+          // No atropellar al Ingeniero
+          if (a == WALK && sensores.agentes[2] == 'i'){
+            
+            int f_fr = sensores.posF, c_fr = sensores.posC;
+            switch (sensores.rumbo) {
+                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
+                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
+            }
+            
+            char original = mapaResultado[f_fr][c_fr]; 
+            mapaResultado[f_fr][c_fr] = 'P';           
+            
+            EstadoT inicio, fin;
+            inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
+            inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
+            fin.site.f = destino_f; fin.site.c = destino_c;
+            
+            plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); 
+            hayPlan = !plan.empty();
+            
+            mapaResultado[f_fr][c_fr] = original; 
+            
+            if (hayPlan && !plan.empty()) {
+                a = plan.front();
+                plan.pop_front();
+                return a;
+            } else {
+                return IDLE; 
+            }
+          } 
+          
+          plan.pop_front();
+          return a;
+        } else {
+          hayPlan = false; 
+        }
+    } 
+    // Si ya hemos llegado al destino 
+    else {
+        // Cuando estemos alineados, repetimos INSTALL sin borrar la orden.
+        // Solo dejaremos de hacerlo cuando el Ingeniero nos lance un nuevo COME.
+        if (sensores.enfrente) {
+          return INSTALL; 
+        }
+
+        // Si el ingeniero no está justo delante, rotamos
+        if (sensores.agentes[2] != 'i') {
+          return TURN_SR; 
+        }
+      }
+    }
+
+    return IDLE;
 }
+
+/*
+ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
+    
+    // Si el ingeniero hace COME, actualizamos todo
+    if (sensores.venpaca) {
+      destino_f = sensores.GotoF;
+      destino_c = sensores.GotoC;
+      tengo_orden = true; // Guardamos que tenemos algo que hacer
+      hayPlan = false;
+    }
+
+    // Si tenemos una orden activa
+    if (tengo_orden) {
+        
+      // Si todavia no hemos llegado a donde el ingeniero nos llamó
+      if (sensores.posF != destino_f || sensores.posC != destino_c) {
+        if (!hayPlan) { // Creamos si no lo hay aún el plan para ir
+          EstadoT inicio, fin;
+          inicio.site.f = sensores.posF;
+          inicio.site.c = sensores.posC;
+          inicio.site.brujula = sensores.rumbo;
+          inicio.zapatillas = tengo_zapatillas;
+          fin.site.f = destino_f;
+          fin.site.c = destino_c;
+          
+          plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
+          hayPlan = !plan.empty();
+        }
+        if (hayPlan && !plan.empty()) {
+          Action a = plan.front();
+          
+          // No atropellar al Ingeniero
+          if (a == WALK && sensores.agentes[2] == 'i'){
+            
+            // MODIFICACION A TU INTENTO:
+            // Girar a la derecha no valía porque el A* volvía a encontrar la misma ruta.
+            // Solución: Calculamos la casilla de enfrente, le decimos al A* que ahí
+            // hay un precipicio ('P') y forzamos el recálculo para que lo rodee.
+            int f_fr = sensores.posF, c_fr = sensores.posC;
+            switch (sensores.rumbo) {
+                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
+                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
+            }
+            
+            char original = mapaResultado[f_fr][c_fr]; // Guardamos lo que había
+            mapaResultado[f_fr][c_fr] = 'P';           // Ponemos pared falsa
+            
+            EstadoT inicio, fin;
+            inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
+            inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
+            fin.site.f = destino_f; fin.site.c = destino_c;
+            
+            plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); // Recalculamos con la pared
+            hayPlan = !plan.empty();
+            
+            mapaResultado[f_fr][c_fr] = original; // Dejamos el mapa intacto
+            
+            // Si el A* encontró un rodeo, ejecutamos el primer paso de esa nueva ruta
+            if (hayPlan && !plan.empty()) {
+                a = plan.front();
+                plan.pop_front();
+                return a;
+            } else {
+                return IDLE; // Si el sitio es muy estrecho y no se puede rodear, esperamos
+            }
+          } 
+          
+          plan.pop_front();
+          return a;
+        } else {
+          hayPlan = false; // reiniciamos hayPlan
+        }
+    } 
+    // Si ya hemos llegado al destino 
+    else {
+        // Si estamos ya orientados entonces hacemos install
+        if (sensores.enfrente) {
+          tengo_orden = false; // Misión completada, volvemos al inicio
+          return INSTALL; 
+        }
+
+        // Si el ingeniero no está justo delante, rotamos
+        if (sensores.agentes[2] != 'i') {
+          return TURN_SR; 
+        }
+      }
+    }
+
+    // Si no tengo orden IDLE
+    return IDLE;
+}
+*/
+/*
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
+
+  // Si hay venpaca, entonces vamos a donde el ingeniero nos mande
+  if (sensores.venpaca){
+    // Si no estoy aun donde me manda el ingeniero
+    if (sensores.posF != sensores.GotoF || sensores.posC != sensores.GotoC) {
+      // A* inline para ir al GotoF en vez de a la Belkanita
+      if (!hayPlan){
+        EstadoT inicio, fin;
+        inicio.site.f = sensores.posF;
+        inicio.site.c = sensores.posC;
+        inicio.site.brujula = sensores.rumbo;
+        inicio.zapatillas = tengo_zapatillas;
+
+        fin.site.f = sensores.GotoF;
+        fin.site.c = sensores.GotoC;
+        
+        plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
+        hayPlan = plan.size() != 0;
+      }
+      if (hayPlan && !plan.empty()){
+        Action a = plan.front();
+        if (a == WALK && sensores.agentes[2] == 'i') return IDLE; // Seguridad
+        plan.pop_front();
+        return a;
+      } else {
+        hayPlan = false;
+        return IDLE;
+      }
+    }
+
+    // Llegamos a la casilla destino dictada por el Ingeniero
+    hayPlan = false;
+  }
+
+  // Ahora procedemos a encararnos con el ingeniero
+  if (!sensores.agentes[2] == 'i')
+    return TURN_SR;
+
+  // Solo si estamos en frente (orientados el uno al otro) entonces hacemos INSTALL
+  if (sensores.enfrente)
+    return INSTALL;
+  
+  return IDLE; // por defecto o plan finalizado
+}
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
+  switch (estado_actual_tec)
+  {
+    case ESPERANDO_ORDEN:
+    {
+       
+      estado_actual_tec = VIAJANDO;
+      hayPlan = false; // Reseteamos por si acaso
+      return IDLE;
+    }
+    case VIAJANDO:
+    {
+      if (sensores.posF != sensores.GotoF || sensores.posC != sensores.GotoC) {
+          // A* inline para ir al GotoF en vez de a la Belkanita
+          if (!hayPlan){
+              EstadoT inicio, fin;
+              inicio.site.f = sensores.posF;
+              inicio.site.c = sensores.posC;
+              inicio.site.brujula = sensores.rumbo;
+              inicio.zapatillas = tengo_zapatillas;
+
+              fin.site.f = sensores.GotoF;
+              fin.site.c = sensores.GotoC;
+              
+              plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
+              hayPlan = plan.size() != 0;
+          }
+          if (hayPlan && !plan.empty()){
+              Action a = plan.front();
+              if (a == WALK && sensores.agentes[2] == 'i') return IDLE; // Seguridad
+              plan.pop_front();
+              return a;
+          } else {
+              hayPlan = false;
+              return IDLE;
+          }
+      }
+      // Llegamos a la casilla destino dictada por el Ingeniero
+      hayPlan = false;
+      estado_actual_tec = ALINEANDO;
+      return IDLE;
+    }
+    case ALINEANDO:
+    {
+      if (sensores.enfrente) {
+        estado_actual_tec = ESPERANDO_ORDEN;
+        return INSTALL; // ¡Bam!
+      }
+      return TURN_SR;
+    }
+    case INSTALANDO:
+      return IDLE; // Ya no hace falta
+  }
+  return IDLE;
+}*/
+
+
 
 /**
  * @brief Comportamiento del técnico para el Nivel 6.
