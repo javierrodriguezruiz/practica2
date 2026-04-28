@@ -368,6 +368,7 @@ private:
   bool terreno_preparado;
   bool esperando_tecnico = false; // para saber si he avisado o no al tecnico en un tramo
   bool esperando_install = false; // Para sincronizar el turno del motor
+  bool llamado_en_ini = false;
 };
 
 #endif
