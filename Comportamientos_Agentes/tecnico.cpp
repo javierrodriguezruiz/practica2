@@ -416,7 +416,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
 
  Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
     
-    // Si el ingeniero hace COME, actualizamos todo
+    // Si el ingeniero hace COME, actualizamos todo para ir hacia alla
     if (sensores.venpaca) {
       destino_f = sensores.GotoF;
       destino_c = sensores.GotoC;
@@ -429,7 +429,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
         
       // Si todavia no hemos llegado a donde el ingeniero nos llamó
       if (sensores.posF != destino_f || sensores.posC != destino_c) {
-        if (!hayPlan) { 
+        if (!hayPlan) {  // si no hay plan al destino lo creamos (Nivel 3)
           EstadoT inicio, fin;
           inicio.site.f = sensores.posF;
           inicio.site.c = sensores.posC;
@@ -441,39 +441,38 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
           plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
           hayPlan = !plan.empty();
         }
-        if (hayPlan && !plan.empty()) {
+        if (hayPlan && !plan.empty()) { // si hay, seguimos ejecutándolo
           Action a = plan.front();
           
-          // ESQUIVAR AL INGENIERO
+          // Caso de choque con ingeniero
           if (a == WALK && sensores.agentes[2] == 'i'){
             
             int f_fr = sensores.posF, c_fr = sensores.posC;
             switch (sensores.rumbo) {
-                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-            }
+              case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
+              case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
+            } // averiguamos la casilla donde está el ingeniero (como está en frente)
+            // solo es ver hacia donde miramos para calcularlo (ej: 0 (Norte) fila--)
 
-            // --- ¡ARREGLO DE LA CASUÍSTICA DE LA CASILLA INICIAL! ---
             // Si la casilla que nos bloquea es exactamente nuestro destino,
-            // NO calculamos el A* (fallaría por ser pared y quemaría CPU).
-            // Simplemente esperamos pacientemente a que el Ingeniero se mueva de ahí.
+            // NO calculamos el A*, simplemente esperamos pacientemente a que el ing se mueva de ahi
             if (f_fr == destino_f && c_fr == destino_c) {
-                return IDLE; 
+              return IDLE; 
             }
-            // --------------------------------------------------------
             
             char original = mapaResultado[f_fr][c_fr]; 
-            mapaResultado[f_fr][c_fr] = 'P';           
+            mapaResultado[f_fr][c_fr] = 'P';  // Lo marcamos como precipicio   
             
             EstadoT inicio, fin;
             inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
             inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
             fin.site.f = destino_f; fin.site.c = destino_c;
             
+            // Recalculamos el A* para ir, pero con dicha casilla ahora marcada como 'P'
             list<Action> plan_alternativo = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); 
             mapaResultado[f_fr][c_fr] = original; 
             
-            if (!plan_alternativo.empty()) {
+            if (!plan_alternativo.empty()) { // ejecutamos plan alternativo
                 plan = plan_alternativo;
                 a = plan.front();
                 plan.pop_front();
@@ -491,12 +490,12 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
     } 
     // Si ya hemos llegado al destino 
     else {
-        // Ejecución continua de INSTALL (actúa como ancla para la validación del simulador)
+        // Si estamos ya encuadrados, repetimos INSTALL hasta poder instalar tuberia
         if (sensores.enfrente) {
           return INSTALL; 
         }
 
-        // Si el ingeniero no está justo delante, rotamos
+        // Si el ingeniero no está justo delante, rotamos a la derecha hasta encontrarlo
         if (sensores.agentes[2] != 'i') {
           return TURN_SR; 
         }
@@ -505,374 +504,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores) {
 
     return IDLE;
 }
-/*
- Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-    
-    if (sensores.venpaca) {
-      destino_f = sensores.GotoF;
-      destino_c = sensores.GotoC;
-      tengo_orden = true; 
-      hayPlan = false;
-    }
-
-    if (tengo_orden) {
-      if (sensores.posF != destino_f || sensores.posC != destino_c) {
-        if (!hayPlan) { 
-          EstadoT inicio, fin;
-          inicio.site.f = sensores.posF;
-          inicio.site.c = sensores.posC;
-          inicio.site.brujula = sensores.rumbo;
-          inicio.zapatillas = tengo_zapatillas;
-          fin.site.f = destino_f;
-          fin.site.c = destino_c;
-          
-          plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
-          hayPlan = !plan.empty();
-        }
-        if (hayPlan && !plan.empty()) {
-          Action a = plan.front();
-
-          // Solo en el caso de que sea ir a la primera casilla (belkanita)
-          // entonces esquivamos al ingeniero activamente
-          /*
-          if (destino_f == sensores.BelPosF && destino_c == sensores.BelPosC){
-            
-            int f_fr = sensores.posF, c_fr = sensores.posC;
-            switch (sensores.rumbo) {
-                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-            }
-
-            char original = mapaResultado[f_fr][c_fr]; 
-            mapaResultado[f_fr][c_fr] = 'P';           
-            
-            EstadoT inicio, fin;
-            inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
-            inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
-            fin.site.f = destino_f; fin.site.c = destino_c;
-            
-            list<Action> plan_alternativo = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); 
-            mapaResultado[f_fr][c_fr] = original; 
-            
-            if (!plan_alternativo.empty()) {
-                plan = plan_alternativo;
-                a = plan.front();
-                plan.pop_front();
-                return a;
-            } else {
-                return IDLE; 
-            }
-          }
-            --------------------
-          
-          // FIN DEL BUCLE DE CPU: En vez de recalcular rutas sin parar,
-          // esperamos pacientemente a que el Ingeniero se quite del medio.
-          if (a == WALK && sensores.agentes[2] == 'i'){
-            return IDLE; 
-          } 
-          
-          plan.pop_front();
-          return a;
-        } else {
-          hayPlan = false; 
-        }
-    } 
-    else {
-        if (sensores.enfrente) return INSTALL; 
-        if (sensores.agentes[2] != 'i') return TURN_SR; 
-      }
-    }
-
-    return IDLE;
-}
-*/
-/*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-    
-    // Si el ingeniero hace COME, actualizamos todo
-    if (sensores.venpaca) {
-      destino_f = sensores.GotoF;
-      destino_c = sensores.GotoC;
-      tengo_orden = true; 
-      hayPlan = false;
-    }
-
-    // Si tenemos una orden activa
-    if (tengo_orden) {
-        
-      // Si todavia no hemos llegado a donde el ingeniero nos llamó
-      if (sensores.posF != destino_f || sensores.posC != destino_c) {
-        if (!hayPlan) { 
-          EstadoT inicio, fin;
-          inicio.site.f = sensores.posF;
-          inicio.site.c = sensores.posC;
-          inicio.site.brujula = sensores.rumbo;
-          inicio.zapatillas = tengo_zapatillas;
-          fin.site.f = destino_f;
-          fin.site.c = destino_c;
-          
-          plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
-          hayPlan = !plan.empty();
-        }
-        if (hayPlan && !plan.empty()) {
-          Action a = plan.front();
-          
-          // ESQUIVAR AL INGENIERO (Recalculando ruta)
-          if (a == WALK && sensores.agentes[2] == 'i'){
-            
-            int f_fr = sensores.posF, c_fr = sensores.posC;
-            switch (sensores.rumbo) {
-                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-            }
-            
-            char original = mapaResultado[f_fr][c_fr]; 
-            mapaResultado[f_fr][c_fr] = 'P';           
-            
-            EstadoT inicio, fin;
-            inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
-            inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
-            fin.site.f = destino_f; fin.site.c = destino_c;
-            
-            list<Action> plan_alternativo = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); 
-            mapaResultado[f_fr][c_fr] = original; 
-            
-            if (!plan_alternativo.empty()) {
-                plan = plan_alternativo;
-                a = plan.front();
-                plan.pop_front();
-                return a;
-            } else {
-                return IDLE; 
-            }
-          } 
-          
-          plan.pop_front();
-          return a;
-        } else {
-          hayPlan = false; 
-        }
-    } 
-    // Si ya hemos llegado al destino 
-    else {
-        // Ejecución continua de INSTALL (actúa como ancla para la validación del simulador)
-        if (sensores.enfrente) {
-          return INSTALL; 
-        }
-
-        // Si el ingeniero no está justo delante, rotamos
-        if (sensores.agentes[2] != 'i') {
-          return TURN_SR; 
-        }
-      }
-    }
-
-    return IDLE;
-}
-
-*/
-/*
- Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-    
-    // Si el ingeniero hace COME, actualizamos todo
-    if (sensores.venpaca) {
-      destino_f = sensores.GotoF;
-      destino_c = sensores.GotoC;
-      tengo_orden = true; 
-      hayPlan = false;
-    }
-
-    // Si tenemos una orden activa
-    if (tengo_orden) {
-        
-      // Si todavia no hemos llegado a donde el ingeniero nos llamó
-      if (sensores.posF != destino_f || sensores.posC != destino_c) {
-        if (!hayPlan) { 
-          EstadoT inicio, fin;
-          inicio.site.f = sensores.posF;
-          inicio.site.c = sensores.posC;
-          inicio.site.brujula = sensores.rumbo;
-          inicio.zapatillas = tengo_zapatillas;
-          fin.site.f = destino_f;
-          fin.site.c = destino_c;
-          
-          plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
-          hayPlan = !plan.empty();
-        }
-        if (hayPlan && !plan.empty()) {
-          Action a = plan.front();
-          
-          // ESQUIVAR OBSTÁCULO: Tu versión original
-          if (a == WALK && sensores.agentes[2] == 'i'){
-            
-            int f_fr = sensores.posF, c_fr = sensores.posC;
-            switch (sensores.rumbo) {
-                case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-                case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-            }
-            
-            char original = mapaResultado[f_fr][c_fr]; 
-            mapaResultado[f_fr][c_fr] = 'P';           
-            
-            EstadoT inicio, fin;
-            inicio.site.f = sensores.posF; inicio.site.c = sensores.posC;
-            inicio.site.brujula = sensores.rumbo; inicio.zapatillas = tengo_zapatillas;
-            fin.site.f = destino_f; fin.site.c = destino_c;
-            
-            plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas); 
-            hayPlan = !plan.empty();
-            mapaResultado[f_fr][c_fr] = original; 
-            
-            if (hayPlan && !plan.empty()) {
-                a = plan.front();
-                plan.pop_front();
-                return a;
-            } else {
-                return IDLE; 
-            }
-          } 
-          
-          plan.pop_front();
-          return a;
-        } else {
-          hayPlan = false; 
-        }
-    } 
-    // Si ya hemos llegado al destino 
-    else {
-        // Hacemos el INSTALL continuo para sincronizar con el Ingeniero
-        if (sensores.enfrente) {
-          return INSTALL; 
-        }
-
-        // Si el ingeniero no está justo delante, rotamos
-        if (sensores.agentes[2] != 'i') {
-          return TURN_SR; 
-        }
-      }
-    }
-
-    return IDLE;
-}
-*/
-/*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-
-  // Si hay venpaca, entonces vamos a donde el ingeniero nos mande
-  if (sensores.venpaca){
-    // Si no estoy aun donde me manda el ingeniero
-    if (sensores.posF != sensores.GotoF || sensores.posC != sensores.GotoC) {
-      // A* inline para ir al GotoF en vez de a la Belkanita
-      if (!hayPlan){
-        EstadoT inicio, fin;
-        inicio.site.f = sensores.posF;
-        inicio.site.c = sensores.posC;
-        inicio.site.brujula = sensores.rumbo;
-        inicio.zapatillas = tengo_zapatillas;
-
-        fin.site.f = sensores.GotoF;
-        fin.site.c = sensores.GotoC;
-        
-        plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
-        hayPlan = plan.size() != 0;
-      }
-      if (hayPlan && !plan.empty()){
-        Action a = plan.front();
-        if (a == WALK && sensores.agentes[2] == 'i') return IDLE; // Seguridad
-        plan.pop_front();
-        return a;
-      } else {
-        hayPlan = false;
-        return IDLE;
-      }
-    }
-
-    // Llegamos a la casilla destino dictada por el Ingeniero
-    hayPlan = false;
-  }
-
-  // Ahora procedemos a encararnos con el ingeniero
-  if (!sensores.agentes[2] == 'i')
-    return TURN_SR;
-
-  // Solo si estamos en frente (orientados el uno al otro) entonces hacemos INSTALL
-  if (sensores.enfrente)
-    return INSTALL;
-  
-  return IDLE; // por defecto o plan finalizado
-}
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores) {
-  switch (estado_actual_tec)
-  {
-    case ESPERANDO_ORDEN:
-    {
-       
-      estado_actual_tec = VIAJANDO;
-      hayPlan = false; // Reseteamos por si acaso
-      return IDLE;
-    }
-    case VIAJANDO:
-    {
-      if (sensores.posF != sensores.GotoF || sensores.posC != sensores.GotoC) {
-          // A* inline para ir al GotoF en vez de a la Belkanita
-          if (!hayPlan){
-              EstadoT inicio, fin;
-              inicio.site.f = sensores.posF;
-              inicio.site.c = sensores.posC;
-              inicio.site.brujula = sensores.rumbo;
-              inicio.zapatillas = tengo_zapatillas;
-
-              fin.site.f = sensores.GotoF;
-              fin.site.c = sensores.GotoC;
-              
-              plan = AlgoritmoAEstrella(inicio, fin, mapaResultado, mapaCotas);
-              hayPlan = plan.size() != 0;
-          }
-          if (hayPlan && !plan.empty()){
-              Action a = plan.front();
-              if (a == WALK && sensores.agentes[2] == 'i') return IDLE; // Seguridad
-              plan.pop_front();
-              return a;
-          } else {
-              hayPlan = false;
-              return IDLE;
-          }
-      }
-      // Llegamos a la casilla destino dictada por el Ingeniero
-      hayPlan = false;
-      estado_actual_tec = ALINEANDO;
-      return IDLE;
-    }
-    case ALINEANDO:
-    {
-      if (sensores.enfrente) {
-        estado_actual_tec = ESPERANDO_ORDEN;
-        return INSTALL; // ¡Bam!
-      }
-      return TURN_SR;
-    }
-    case INSTALANDO:
-      return IDLE; // Ya no hace falta
-  }
-  return IDLE;
-}*/
-
 
 
 /**

@@ -457,10 +457,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
-
-
  Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores) {
   
+  // Si no tenemos plan te tuberias, entonces lo creamos (lógica Nivel 4)
   if (plan_tuberia.empty()) {
     EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
     vector<pair<int, int>> plantas;
@@ -479,34 +478,41 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
     if (!plan_tuberia.empty()) VisualizaRedTuberias(lista_plan);
   }
 
+  // Si hemos terminado el plan IDLE
   if (tramo_actual >= plan_tuberia.size() - 1) return IDLE;
 
+  // Casillas de inicio y de final de tramo de tubería actual
   int f_ini = plan_tuberia[tramo_actual].fil;
   int c_ini = plan_tuberia[tramo_actual].col;
   int f_fin = plan_tuberia[tramo_actual + 1].fil;
   int c_fin = plan_tuberia[tramo_actual + 1].col;
 
-  // Condicion 1: ¿Estamos en la casilla FIN y ya hemos llamado al tecnico?
+  // Condicion 1: Si estamos en la casilla fin y ya hemos llamado al tecnico
   if (sensores.posF == f_fin && sensores.posC == c_fin && esperando_tecnico) {
       
+    // Realizamos adaptación del terreno si fuera necesario
     if (plan_tuberia[tramo_actual + 1].op != 0 && !terreno_preparado) {
       terreno_preparado = true;
       return (plan_tuberia[tramo_actual + 1].op == -1) ? DIG : RAISE;
     }
 
+    // Buscamos la orientación de la casilla en la que el tec estará
     int brujula_dest = -1; 
     if (c_ini > sensores.posC) brujula_dest = 2;      
     else if (c_ini < sensores.posC) brujula_dest = 6; 
     else if (f_ini > sensores.posF) brujula_dest = 4; 
     else if (f_ini < sensores.posF) brujula_dest = 0; 
 
+    // Nos orientamos hacia ella
     if (sensores.rumbo != (Orientacion)brujula_dest) {
       int diff = (brujula_dest - (int)sensores.rumbo + 8) % 8;
       return (diff <= 4) ? TURN_SR : TURN_SL;
+      // Si está a 4 giros o menos a la derecha, TURN_SR; si no, es más corto por la izq (TURN_SL)
     }
 
+    // Si esta en frente nuestra y orientado
     if (sensores.enfrente) { 
-      if (!esperando_install) {
+      if (!esperando_install) { // esperamos un turno para cuadrarnos con el tecnico
         esperando_install = true;
         return IDLE; 
       } else {
@@ -515,23 +521,28 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
         esperando_tecnico = false; 
         terreno_preparado = false; 
         
+        // Si estamos en el ultimo tramo del plan, borramos el plan
         if (tramo_actual >= plan_tuberia.size() - 1) plan_tuberia.clear(); 
+
+        // Instalamos
         return INSTALL; 
       }
-    } else {
+    } else { // Si no está en frente, entonces esperando_install = false
       esperando_install = false; 
     }
     return IDLE; 
   }
 
-  // Condicion 2: ¿Estamos en la casilla INICIO y no hemos llamado al tecnico?
+  // Condicion 2: Estamos en la casilla de inicio y no hemos llamado al técnico
   else if (sensores.posF == f_ini && sensores.posC == c_ini && !esperando_tecnico) {
       
-    if (!llamado_en_ini) {
-      llamado_en_ini = true;
+    if (!llamado_en_ini) { // Lo llamamos
+      llamado_en_ini = true; // cambiamos a true
       return COME; 
     }
 
+    // Comprobamos que efectivamente es el primer tramo y si no hemos preparado el terreno
+    // y se necesita hacer dig/raise procedemos a hacerlo
     if (tramo_actual == 0 && plan_tuberia[tramo_actual].op != 0 && !terreno_preparado) {
       terreno_preparado = true;
       return (plan_tuberia[tramo_actual].op == -1) ? DIG : RAISE;
@@ -541,20 +552,20 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
     llamado_en_ini = false; 
     esperando_tecnico = true; 
     hayPlan = false; 
-    // return IDLE; 
+    // Actualizamos variables
   }
 
-  // Condicion 3: Viajes 
+  // Condicion 3: Procedemos a hacer los movimientos para ir a nuestra proxima meta (ya sea inicial o luego)
   else {
+    // Si ya hemos llamado al tecnico vamos a nuestra casilla para la prox instalacion
     int target_f = esperando_tecnico ? f_fin : f_ini;
     int target_c = esperando_tecnico ? c_fin : c_ini;
 
     int df = target_f - sensores.posF;
     int dc = target_c - sensores.posC;
 
-    // OPTIMIZACIÓN MÁXIMA: Si el objetivo está pegado a nosotros, 
-    // calculamos la ruta matemáticamente al instante. Adiós a los 3-4s de parón.
-    if (abs(df) <= 1 && abs(dc) <= 1 && (df != 0 || dc != 0)) {
+    // Si el objetivo está pegado a nosotros, calculamos la ruta automáticamente sin algoritmo 
+    if (abs(df) <= 1 && abs(dc) <= 1 && (df != 0 || dc != 0)) { // si es casilla adyacente
       int bruj_req = -1;
       if (df == -1 && dc == 0) bruj_req = 0;
       else if (df == -1 && dc == 1) bruj_req = 1;
@@ -564,16 +575,17 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
       else if (df == 1 && dc == -1) bruj_req = 5;
       else if (df == 0 && dc == -1) bruj_req = 6;
       else if (df == -1 && dc == -1) bruj_req = 7;
+      // Vemos a que direccion tiene que ir el agente
 
       if (sensores.rumbo != bruj_req) {
         int diff = (bruj_req - (int)sensores.rumbo + 8) % 8;
-        return (diff <= 4) ? TURN_SR : TURN_SL;
-      } else {
-        if (sensores.agentes[2] == 't') return IDLE; // Esperar al técnico pacientemente
-        return WALK;
+        return (diff <= 4) ? TURN_SR : TURN_SL; // Vemos hacia donde girar mejor
+      } else { // Si esta el tecnico en frente, esperamos a que se mueva
+        if (sensores.agentes[2] == 't') return IDLE; // Esperar al técnico
+        return WALK;  // Andamos hacia dicha direccción
       }
     }
-    // Si está lejos (solo el viaje inicial), usamos Búsqueda en Anchura
+    // Si está lejos (solo el viaje inicial a la casilla de belkanita), usamos Búsqueda en Anchura
     else {
       if (!hayPlan) { 
         EstadoI ini_est = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
@@ -585,11 +597,11 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
       if (hayPlan && !plan.empty()) { 
         Action a = plan.front();
         
-        // FIN DEL BUCLE INFINITO DE CPU: Si chocamos, simplemente esperamos
+        // Condicion de seguridad, si andamos y lo tenemos en frente, esperamos
         if (a == WALK && sensores.agentes[2] == 't') return IDLE; 
         
         plan.pop_front();
-        return a;
+        return a; // ejecutamos el plan de BFS
       } else {
         hayPlan = false;
       }
@@ -599,530 +611,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
   return IDLE;
 }
 
-/*
-Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores) {
-  
-  // Planificacion inicial de tuberias
-  if (plan_tuberia.empty()) {
-    EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-    vector<pair<int, int>> plantas;
-
-    for (int f = 0; f < mapaResultado.size(); f++) 
-      for (int c = 0; c < mapaResultado[f].size(); c++) 
-        if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-
-    list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-    plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-    tramo_actual = 0;
-    esperando_tecnico = false; 
-    esperando_install = false; 
-    llamado_en_ini = false; // Reset de la llamada anticipada
-    hayPlan = false;
-    if (!plan_tuberia.empty()) VisualizaRedTuberias(lista_plan);
-  }
-
-  // Si ya hemos terminado toda la red, nos quedamos en IDLE
-  if (tramo_actual >= plan_tuberia.size() - 1) return IDLE;
-
-  int f_ini = plan_tuberia[tramo_actual].fil;
-  int c_ini = plan_tuberia[tramo_actual].col;
-  int f_fin = plan_tuberia[tramo_actual + 1].fil;
-  int c_fin = plan_tuberia[tramo_actual + 1].col;
-
-  // Condicion 1: ¿Estamos en la casilla FIN (f_fin) y ya hemos llamado al tecnico?
-  if (sensores.posF == f_fin && sensores.posC == c_fin && esperando_tecnico) {
-      
-    // Acondicionar NUESTRO propio terreno en f_fin si hace falta
-    if (plan_tuberia[tramo_actual + 1].op != 0 && !terreno_preparado) {
-      terreno_preparado = true;
-      return (plan_tuberia[tramo_actual + 1].op == -1) ? DIG : RAISE;
-    }
-
-    // Nos orientamos hacia el Técnico
-    int brujula_dest = -1; 
-    if (c_ini > sensores.posC) brujula_dest = 2;      
-    else if (c_ini < sensores.posC) brujula_dest = 6; 
-    else if (f_ini > sensores.posF) brujula_dest = 4; 
-    else if (f_ini < sensores.posF) brujula_dest = 0; 
-
-    // OPTIMIZACIÓN: Giro Inteligente. Calcula la distancia más corta
-    if (sensores.rumbo != (Orientacion)brujula_dest) {
-      int diff = (brujula_dest - (int)sensores.rumbo + 8) % 8;
-      return (diff <= 4) ? TURN_SR : TURN_SL;
-    }
-
-    // Instalación con sincronización perfecta de 1 turno
-    if (sensores.enfrente) { 
-      if (!esperando_install) {
-        esperando_install = true;
-        return IDLE; 
-      } else {
-        esperando_install = false;
-        tramo_actual++; 
-        esperando_tecnico = false; 
-        terreno_preparado = false; 
-        
-        if (tramo_actual >= plan_tuberia.size() - 1) {
-          plan_tuberia.clear(); 
-        }
-        return INSTALL; 
-      }
-    } else {
-      esperando_install = false; 
-    }
-    return IDLE; 
-  }
-
-  // Condicion 2: si estamos en la casilla de inicio y no hemos llamado al tecnico
-  else if (sensores.posF == f_ini && sensores.posC == c_ini && !esperando_tecnico) {
-      
-    // OPTIMIZACIÓN: Llamada anticipada ANTES de excavar
-    if (!llamado_en_ini) {
-      llamado_en_ini = true;
-      return COME; 
-    }
-
-    // Excavamos solo si es el Tramo 0 para proteger las cotas
-    if (tramo_actual == 0 && plan_tuberia[tramo_actual].op != 0 && !terreno_preparado) {
-      terreno_preparado = true;
-      return (plan_tuberia[tramo_actual].op == -1) ? DIG : RAISE;
-    }
-    
-    // Preparativos listos, pasamos al viaje
-    terreno_preparado = false; 
-    llamado_en_ini = false; 
-    esperando_tecnico = true; 
-    hayPlan = false; 
-    return IDLE; 
-  }
-
-  // Condicion 3: Viajes 
-  else {
-    int target_f = esperando_tecnico ? f_fin : f_ini;
-    int target_c = esperando_tecnico ? c_fin : c_ini;
-
-    if (!hayPlan) { 
-      EstadoI ini_est = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-      EstadoI fin_est = {{target_f, target_c, (Orientacion)0}, tengo_zapatillas};
-      plan = B_Anchura_V2(ini_est, fin_est, mapaResultado, mapaCotas);
-      hayPlan = !plan.empty();
-    }
-    
-    if (hayPlan && !plan.empty()) { 
-      Action a = plan.front();
-      
-      // ESQUIVAR AL TÉCNICO (Recalculando ruta)
-      /*
-      if (a == WALK && sensores.agentes[2] == 't') {
-        int f_fr = sensores.posF, c_fr = sensores.posC;
-        switch (sensores.rumbo) {
-          case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-          case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-        }
-
-        char orig = mapaResultado[f_fr][c_fr];
-        mapaResultado[f_fr][c_fr] = 'P'; 
-        
-        EstadoI ini_est = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-        EstadoI fin_est = {{target_f, target_c, (Orientacion)0}, tengo_zapatillas};
-        
-        list<Action> plan_alternativo = B_Anchura_V2(ini_est, fin_est, mapaResultado, mapaCotas);
-        mapaResultado[f_fr][c_fr] = orig; 
-        
-        // Asignamos el plan si hay desvío, si no esperamos sin machacar la CPU
-        if (!plan_alternativo.empty()) {
-          plan = plan_alternativo;
-          a = plan.front();
-          plan.pop_front();
-          return a;
-        } else {
-          return IDLE; 
-        }
-      }
-        //---------
-      plan.pop_front();
-      return a;
-    } else {
-      hayPlan = false;
-    }
-  }
-
-  return IDLE;
-}
-*/
-
-/*
-
-Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores) {
-  
-  // Planificacion inicial de tuberias
-  if (plan_tuberia.empty()) {
-    EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-    vector<pair<int, int>> plantas;
-
-    for (int f = 0; f < mapaResultado.size(); f++) 
-      for (int c = 0; c < mapaResultado[f].size(); c++) 
-        if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-
-    list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-    plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-    tramo_actual = 0;
-    esperando_tecnico = false; 
-    esperando_install = false; 
-    llamado_en_ini = false; // Reset de la optimizacion
-    hayPlan = false;
-    if (!plan_tuberia.empty()) VisualizaRedTuberias(lista_plan);
-  }
-
-  // Si ya hemos terminado toda la red, nos quedamos en IDLE
-  if (tramo_actual >= plan_tuberia.size() - 1) return IDLE;
-
-  int f_ini = plan_tuberia[tramo_actual].fil;
-  int c_ini = plan_tuberia[tramo_actual].col;
-  int f_fin = plan_tuberia[tramo_actual + 1].fil;
-  int c_fin = plan_tuberia[tramo_actual + 1].col;
-
-  // Condicion 1: ¿Estamos en la casilla FIN (f_fin) y ya hemos llamado al tecnico?
-  if (sensores.posF == f_fin && sensores.posC == c_fin && esperando_tecnico) {
-      
-    // Acondicionar NUESTRO propio terreno en f_fin si hace falta
-    if (plan_tuberia[tramo_actual + 1].op != 0 && !terreno_preparado) {
-      terreno_preparado = true;
-      return (plan_tuberia[tramo_actual + 1].op == -1) ? DIG : RAISE;
-    }
-
-    // Nos orientamos hacia el Técnico
-    int brujula_dest = -1; 
-    if (c_ini > sensores.posC) brujula_dest = 2;      
-    else if (c_ini < sensores.posC) brujula_dest = 6; 
-    else if (f_ini > sensores.posF) brujula_dest = 4; 
-    else if (f_ini < sensores.posF) brujula_dest = 0; 
-
-    // OPTIMIZACIÓN: Giro Inteligente. Calcula si es mejor girar a izq o der.
-    if (sensores.rumbo != (Orientacion)brujula_dest) {
-      int diff = (brujula_dest - (int)sensores.rumbo + 8) % 8;
-      return (diff <= 4) ? TURN_SR : TURN_SL;
-    }
-
-    // Instalación con la Sincronización del motor
-    if (sensores.enfrente) { 
-      if (!esperando_install) {
-        esperando_install = true;
-        return IDLE; 
-      } else {
-        esperando_install = false;
-        tramo_actual++; 
-        esperando_tecnico = false; 
-        terreno_preparado = false; 
-        
-        if (tramo_actual >= plan_tuberia.size() - 1) {
-          plan_tuberia.clear(); 
-        }
-        return INSTALL; 
-      }
-    } else {
-      esperando_install = false; 
-    }
-    return IDLE; 
-  }
-
-  // Condicion 2: si estamos en la casilla de inicio y no hemos llamado al tecnico
-  else if (sensores.posF == f_ini && sensores.posC == c_ini && !esperando_tecnico) {
-      
-    // OPTIMIZACIÓN: Llamamos al técnico nada más pisar la casilla, antes de cavar.
-    if (!llamado_en_ini) {
-      llamado_en_ini = true;
-      return COME; 
-    }
-
-    // Excavamos solo si es el Tramo 0
-    if (tramo_actual == 0 && plan_tuberia[tramo_actual].op != 0 && !terreno_preparado) {
-      terreno_preparado = true;
-      return (plan_tuberia[tramo_actual].op == -1) ? DIG : RAISE;
-    }
-    
-    // Ya hemos llamado y preparado: pasamos a fase de viaje
-    terreno_preparado = false; 
-    llamado_en_ini = false; // Reset para el siguiente tramo
-    esperando_tecnico = true; 
-    hayPlan = false; 
-    return IDLE; // Cedemos el turno, en el próximo entraremos en Viajes
-  }
-
-  // Condicion 3: Viajes 
-  else {
-    int target_f = esperando_tecnico ? f_fin : f_ini;
-    int target_c = esperando_tecnico ? c_fin : c_ini;
-
-    if (!hayPlan) { 
-      EstadoI ini_est = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-      EstadoI fin_est = {{target_f, target_c, (Orientacion)0}, tengo_zapatillas};
-      plan = B_Anchura_V2(ini_est, fin_est, mapaResultado, mapaCotas);
-      hayPlan = !plan.empty();
-    }
-    
-    if (hayPlan && !plan.empty()) { 
-      Action a = plan.front();
-      
-      // ESQUIVAR OBSTÁCULO: Tu versión original que funciona para sobrevivir
-      if (a == WALK && sensores.agentes[2] == 't') {
-        int f_fr = sensores.posF, c_fr = sensores.posC;
-        switch (sensores.rumbo) {
-          case 0: f_fr--; break; case 1: f_fr--; c_fr++; break; case 2: c_fr++; break; case 3: f_fr++; c_fr++; break;
-          case 4: f_fr++; break; case 5: f_fr++; c_fr--; break; case 6: c_fr--; break; case 7: f_fr--; c_fr--; break;
-        }
-
-        char orig = mapaResultado[f_fr][c_fr];
-        mapaResultado[f_fr][c_fr] = 'P'; 
-        
-        EstadoI ini_est = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-        EstadoI fin_est = {{target_f, target_c, (Orientacion)0}, tengo_zapatillas};
-        plan = B_Anchura_V2(ini_est, fin_est, mapaResultado, mapaCotas);
-        hayPlan = !plan.empty();
-        mapaResultado[f_fr][c_fr] = orig; 
-        
-        if (hayPlan && !plan.empty()) {
-          a = plan.front();
-          plan.pop_front();
-          return a;
-        } else {
-          return IDLE; 
-        }
-      }
-      plan.pop_front();
-      return a;
-    } else {
-      hayPlan = false;
-    }
-  }
-
-  return IDLE;
-}
-  */
-/*
-Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores){
-
-  vector<pair<int, int>> plantas;
-  list<Paso> lista_plan;
-
-  // Nivel 4. Si no hay plan de tuberias lo buscamos 
-    if (plan_tuberia.empty()){
-      // Iniciamos el plan en la pos de la belkanita
-      EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-
-      // vector de plantas de tratamiento de residuos
-      for (int f = 0; f < mapaResultado.size(); f++) 
-        for (int c = 0; c < mapaResultado[f].size(); c++) 
-          if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-
-      lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-      plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-      tramo_actual = 0;
-      if (plan_tuberia.size() > 0)
-        VisualizaRedTuberias(lista_plan);  // pintamos el plan
-      hayPlan = false;  // reiniciamos para el futuro
-    }
-
-  if (tramo_actual != plan_tuberia.size()-1){ // mientras no estemos en el ultimo tramo del plan
-
-    // Ingeniero va a la casilla del tramo actual del plan para DIG/RAISE y llamar al tec
-    EstadoI fin = {{plan_tuberia[tramo_actual].fil, plan_tuberia[tramo_actual].col}}; // Estado al que queremos llegar (inicio de la tuberia)
-    EstadoI ini = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-    plan = B_Anchura_V2(ini, fin, mapaResultado, mapaCotas);
-    VisualizaPlan(ini.site,plan);
-    hayPlan = plan.size() != 0;
-
-    // Hasta que no estemos en la casilla de inicio, vamos ejecutando el plan, pero sin que este avisado el tecnico
-    if (sensores.posF != fin.site.f || sensores.posC != fin.site.c && hayPlan){
-      if (hayPlan && plan.size() > 0){
-        // Ingeniero va a dicha casilla mediante el algoritmo diseñado en el nivel 2
-        Action accion = plan.front();
-        plan.pop_front();
-        return accion;
-      }
-    }
-
-    // el ingeniero ya está en la casilla inicial
-    hayPlan = false;
-
-    // Realizamos si es necesario DIG / RAISE
-    int op_ini = plan_tuberia[0].op;
-
-    if (op_ini != 0){ // si es dig o raise lo ejecutamos
-      Action accion = (op_ini == -1) ? DIG : RAISE;
-      return accion;
-    }
-    
-    // Nos vamos a nuestra casilla (plan(tramo_actual + 1)) mediante el alg del nivel 2 de nuevo
-    fin = {plan_tuberia[tramo_actual + 1].fil, plan_tuberia[tramo_actual + 1].col};
-    ini = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-
-    // Llamamos al Técnico y nos vamos a nuestra casilla
-    if (sensores.posF == fin.site.f && sensores.posC == fin.site.c && !sensores.venpaca && avisado == 0){
-      avisado = 1;  // avisamos y COME
-      return COME;
-    }
-
-    // misma logica que antes
-    plan = B_Anchura_V2(ini, fin, mapaResultado, mapaCotas);
-    VisualizaPlan(ini.site,plan);
-    hayPlan = plan.size() != 0;
-
-    // Hasta que no estemos en la casilla de inicio, vamos ejecutando el plan 
-    if (sensores.posF != plan_tuberia[tramo_actual + 1].fil || sensores.posC != plan_tuberia[tramo_actual + 1].col){
-      if (hayPlan && plan.size() > 0){
-        // Ingeniero va a dicha casilla mediante el algoritmo diseñado en el nivel 2
-        Action accion = plan.front();
-        plan.pop_front();
-        return accion;
-      }
-    }
-
-    // Ingeniero gira hasta que esté el tecnico en frente
-    if (!sensores.agentes[2] == 'i'){
-      return TURN_SR;
-    }
-
-    // Solo cuando este en frente, en el sentido de mirándose--> INSTALL
-    if (sensores.enfrente){
-      tramo_actual++;
-      avisado = 0; // reseteamos para la proxima llamada del ingeniero
-      return INSTALL; // instalamos y nos movemos al siguiente tramo
-    }
-  } // if grande para plan tuberias
-  
-  
-  return IDLE; // nivel finalizado
-}
-*/
-
-/*
-Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores)
-{
-  vector<pair<int, int>> plantas;
-  list<Paso> lista_plan;
-
-  switch (estado_actual)
-  {
-    case PLANIFICANDO:
-    {
-      if (plan_tuberia.empty()){
-        EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-
-        for (int f = 0; f < mapaResultado.size(); f++) 
-          for (int c = 0; c < mapaResultado[f].size(); c++) 
-            if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-
-        lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-        plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-        tramo_actual = 0;
-        hayPlan = false; 
-      }
-      estado_actual = PREPARANDO_INICIO; 
-      return IDLE;
-    }
-    
-    case PREPARANDO_INICIO:
-    {
-      // Preparamos la casilla inicial de la Belkanita si lo requiere
-      int op_ini = plan_tuberia[0].op;
-      if (tramo_actual == 0 && op_ini != 0 && !terreno_preparado) {
-          terreno_preparado = true;
-          if (op_ini == -1) return DIG;
-          if (op_ini == 1) return RAISE;
-      }
-      terreno_preparado = false; 
-      estado_actual = LLAMANDO_TECNICO; 
-      return IDLE;
-    }
-
-    case LLAMANDO_TECNICO:
-    {
-      // Estamos pisando tramo_actual. Llamamos al técnico aquí.
-      hayPlan = false; 
-      estado_actual = YENDO_A_DESTINO;
-      return COME;
-    }
-    
-    case YENDO_A_DESTINO:
-    {
-      // Viajamos a la siguiente casilla (tramo_actual + 1)
-      int dest_f = plan_tuberia[tramo_actual + 1].fil;
-      int dest_c = plan_tuberia[tramo_actual + 1].col;
-
-      if (sensores.posF != dest_f || sensores.posC != dest_c){
-        if (!hayPlan){ 
-          EstadoI ini = {{sensores.posF, sensores.posC, sensores.rumbo}, tengo_zapatillas};
-          plan = B_Anchura_V2(ini, {{dest_f, dest_c, (Orientacion)0}, tengo_zapatillas}, mapaResultado, mapaCotas);
-          hayPlan = true;
-        }
-        if (!plan.empty()) { 
-          Action sig_accion = plan.front(); 
-          if (sig_accion == WALK && sensores.agentes[2] == 't') return IDLE; // Seguridad anticaídas
-          plan.pop_front();
-          return sig_accion;  
-        } else {
-          hayPlan = false;
-          return IDLE;
-        }
-      } else { 
-        // Ya hemos llegado a i+1
-        estado_actual = PREPARANDO_DESTINO;
-      }
-      return IDLE;
-    }
-
-    case PREPARANDO_DESTINO:
-    {
-      // Preparamos i+1 mientras lo pisamos
-      int op = plan_tuberia[tramo_actual + 1].op;
-      if (op != 0 && !terreno_preparado) {
-          terreno_preparado = true;
-          if (op == -1) return DIG;
-          if (op == 1) return RAISE;
-      }
-      terreno_preparado = false; 
-      estado_actual = ALINEANDO;
-      return IDLE;
-    }
-    
-    case ALINEANDO: 
-    {
-      // Nos orientamos hacia ATRÁS, donde está el técnico (tramo_actual)
-      int tec_f = plan_tuberia[tramo_actual].fil;
-      int tec_c = plan_tuberia[tramo_actual].col;
-      int brujula_dest = -1; 
-
-      if (tec_c > (int)sensores.posC) brujula_dest = 2; // Este
-      else if (tec_c < (int)sensores.posC) brujula_dest = 6; // Oeste
-      else if (tec_f > (int)sensores.posF) brujula_dest = 4; // Sur
-      else if (tec_f < (int)sensores.posF) brujula_dest = 0; // Norte
-
-      if (sensores.rumbo != (Orientacion)brujula_dest) return TURN_SR;
-
-      estado_actual = INSTALANDO;
-      return IDLE;
-    }
-    
-    case INSTALANDO: 
-    {
-      // ¡Sincronización instantánea guiada por el simulador!
-      if (!sensores.enfrente) {
-          return IDLE; 
-      }
-
-      tramo_actual++;
-      hayPlan = false;
-
-      if (tramo_actual >= (int)plan_tuberia.size() - 1) estado_actual = PLANIFICANDO; 
-      else estado_actual = LLAMANDO_TECNICO; 
-
-      return INSTALL;
-    }
-  }
-  return IDLE;
-}
-*/
 /**
  * @brief Comportamiento del ingeniero para el Nivel 6.
  * @param sensores Datos actuales de los sensores.
