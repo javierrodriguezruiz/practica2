@@ -616,9 +616,350 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
-Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores)
+
+ /* A TENER EN CUENTA PARA FUTURO
+ Nota: Si el Ingeniero también usa una función de búsqueda de movimiento para ir de un tramo a otro de la tubería, también debe permitir los '?' en su movimiento, manteniendo la prohibición de los '?' solo para el A* que planifica la tubería global
+ */
+
+ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
+  // 1. ¡NUEVO! Actualizamos el mapa SIEMPRE, hagamos lo que hagamos.
+  // Así nunca estamos ciegos cuando ejecutamos una ruta del Nivel 5.
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+  }
+
+  Action accion_final = IDLE;
+
+  // FASE 1: Exploración y Planificación
+  if (plan_tuberia.empty()) {
+    if (sensores.BelPosF != -1 && sensores.BelPosC != -1) {
+      intento_plan++;
+      if (intento_plan % 15 == 0) {
+        EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
+        vector<pair<int, int>> plantas;
+
+        for (int f = 0; f < mapaResultado.size(); f++) 
+          for (int c = 0; c < mapaResultado[f].size(); c++) 
+            if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
+
+        if (!plantas.empty()) {
+          list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
+          
+          if (!lista_plan.empty()) {
+            plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
+            tramo_actual = 0;
+            esperando_tecnico = false; 
+            esperando_install = false; 
+            llamado_en_ini = false; 
+            hayPlan = false;
+            VisualizaRedTuberias(lista_plan);
+          }
+        }
+      }
+    }
+  }
+
+  // FASE 2: Decisión de Acción
+  // FASE 2: Decisión de Acción
+  if (plan_tuberia.empty()) {
+    // Si aún no hemos encontrado un plan viable, seguimos explorando el mapa
+    return AdaptadaComportamientoIngenieroNivel_1(sensores);
+  } else {
+    // === PATRÓN ENVOLTORIO PARA PROTEGER EL NIVEL 5 ===
+    
+    // 1. Guardamos y enmascaramos las casillas '?' como 'M' (Muros)
+    vector<pair<int,int>> modificadas;
+    for (int f = 0; f < mapaResultado.size(); f++) {
+      for (int c = 0; c < mapaResultado[f].size(); c++) {
+        if (mapaResultado[f][c] == '?') {
+          mapaResultado[f][c] = 'M';
+          modificadas.push_back({f, c});
+        }
+      }
+    }
+
+    // 2. Llamamos al Nivel 5 como caja negra. 
+    // Sus algoritmos de búsqueda (BFS) verán los 'M' y jamás trazarán rutas por lo desconocido.
+    Action accion_final = ComportamientoIngenieroNivel_5(sensores);
+
+    // 3. Restauramos las casillas a '?' 
+    // Comprobamos que siga siendo 'M' por si el propio Nivel 5 actualizó el mapa
+    // descubriendo un terreno real en ese turno.
+    for (auto &p : modificadas) {
+      if (mapaResultado[p.first][p.second] == 'M') {
+        mapaResultado[p.first][p.second] = '?';
+      }
+    }
+
+    // Ya podemos devolver la acción segura
+    return accion_final; 
+  }
+
+  // 3. --- MEGA FILTRO SALVAVIDAS ---
+  // Interceptamos la acción antes de enviarla. Si el Nivel 5 nos manda a la muerte, lo paramos.
+  if (accion_final == WALK) {
+    unsigned char obj = sensores.superficie[2]; // Lo que hay exactamente delante
+    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
+    bool altura_mala = (!tengo_zapatillas && desnivel > 1) || (tengo_zapatillas && desnivel > 2);
+
+    if (obj == 'P' || obj == 'M' || altura_mala) {
+      // Íbamos a matarnos o a chocar con un muro fantasma. ¡Abortamos ruta!
+      plan.clear();
+      hayPlan = false;
+      return IDLE; // El próximo turno recalculará la ruta con el mapa ya actualizado
+    } else if (sensores.agentes[2] == 't') {
+      // Si nuestro compañero está bloqueando, solo esperamos en IDLE, sin borrar el plan
+      return IDLE;
+    }
+  }
+
+  return accion_final;
+}
+
+/*
+Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
+  // FASE 1: Exploración y Planificación
+  if (plan_tuberia.empty()) {
+    // Solo intentamos planificar si ya hemos localizado la Belkanita
+    if (sensores.BelPosF != -1 && sensores.BelPosC != -1) {
+      intento_plan++;
+      
+      // Intentamos calcular el plan de tuberías solo cada 15 turnos para no agotar 
+      // los 300 segundos de CPU máximos permitidos por el simulador.
+      if (intento_plan % 15 == 0) {
+        EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
+        vector<pair<int, int>> plantas;
+
+        // Buscamos si hemos descubierto ya alguna planta de residuos 'U'
+        for (int f = 0; f < mapaResultado.size(); f++) 
+          for (int c = 0; c < mapaResultado[f].size(); c++) 
+            if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
+
+        // Si hemos visto alguna 'U', lanzamos A*
+        if (!plantas.empty()) {
+          list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
+          
+          if (!lista_plan.empty()) {
+            // ¡ÉXITO! Hemos descubierto suficiente mapa para crear una red de tuberías válida.
+            plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
+            tramo_actual = 0;
+            esperando_tecnico = false; 
+            esperando_install = false; 
+            llamado_en_ini = false; 
+            hayPlan = false;
+            VisualizaRedTuberias(lista_plan);
+          }
+        }
+      }
+    }
+  }
+
+  // FASE 2: Decisión de Acción
+  if (plan_tuberia.empty()) {
+    // Si aún no hemos encontrado un plan viable, seguimos explorando el mapa
+    // Reciclamos exactamente tu lógica ganadora del Nivel 1.
+    return AdaptadaComportamientoIngenieroNivel_1(sensores);
+  } else {
+    // Si ya tenemos un plan firme, pasamos a modo constructor.
+    // Usamos el código de ejecución que ya tienes del Nivel 5.
+    return ComportamientoIngenieroNivel_5(sensores); 
+  }
+}
+*/
+
+
+//****************************************************/
+// ADAPTAMOS COMPORTAMIENTO_NIVEL1 para que pueda pisar mas casillas :
+bool ComportamientoIngeniero::es_caminoNivel_6(unsigned char c) const {
+  // En exploración profunda, todo lo que no sea Muro, Bosque o Precipicio es explorable (incluye Hierba, Agua)
+  return (c != 'P' && c != 'M' && c != 'B' && c != 'A'); // Prohibimos agua por energia 
+}
+
+bool ComportamientoIngeniero::EsCasillaTransitableLevel6(int f, int c, bool tieneZapatillas)
 {
-  return IDLE;
+  if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size())
+    return false;
+  return es_caminoNivel_6(mapaResultado[f][c]); // Solo 'C', 'D', 'S' son transitables en Nivel 1
+}
+
+int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual){
+
+  // Buscamos las zapatillas, solo en caso de NO tenerlas ya
+  if (!zap) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Buscamos casillas de tipo camino o sendero (en este nivel no tenemos en cuenta energía)
+  // Pero además iremos a la casilla que haya sido visitada menos veces
+
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // Procedemos a buscar el minimo de visitas
+  // Inicializamos al maximo
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // Si estan en los rangos adecuados entonces le asignamos su valor correspondiente
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+    
+  // elegimos la casilla menos visitada siempre que sea camino y sendero
+
+  int mejor_opcion = 0;  // en caso de que no encuentre nada, decide el agente
+  int menor = INT_MAX;
+
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap) && visitas_c < menor) {
+    menor = visitas_c;
+    mejor_opcion = 2; // WALK
+  }
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap) && visitas_i < menor) {
+    menor = visitas_i;
+    mejor_opcion = 1; // TURN_SL
+  }
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap) && visitas_d < menor) {
+    menor = visitas_d;
+    mejor_opcion = 3; // TURN_SL
+  }
+
+  return mejor_opcion; 
+}
+
+Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores sensores)
+{
+  // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
+  // pasamos por T. Residuos.
+
+  // Inicializamos la matriz de mapas visitados
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
+
+  // actualizamos el mapa y la matriz de casillas visitadas
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
+
+  // Obtenemos los datos de los sensores para observar si podemos avanzar
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  // Actualizamos variable tengo_zapatillas
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+  // Condicion de parada en T. Residuos eliminada
+
+  
+  // BUSQUEDA DE CASILLAS OBJETIVO:
+  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0], tengo_zapatillas);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0], tengo_zapatillas);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
+
+  // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
+  if (sensores.agentes[1] == 't') i = 'P'; 
+  // si está, la 'marcamos' como precipicio para no pasar
+  if (sensores.agentes[2] == 't'){
+    last_action = TURN_SR;
+    return TURN_SR;
+  }
+  if (sensores.agentes[3] == 't') d = 'P';
+
+  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual);
+
+  if (pos == 2){
+    giros_consecutivos = 0;
+    return WALK;
+  }else if (pos == 1){
+    giros_consecutivos = 0;
+    return TURN_SL;
+  }else if (pos == 3){
+    giros_consecutivos = 0;
+    return TURN_SR;
+  }
+  
+  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
+  // Pasamos a explorar:
+
+  // Inicializamos la accion a IDLE 
+  Action accion = IDLE;
+
+  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
+
+  // Si podemos avanzar pero en frente tenemos al tecnico, giraremos
+  if (puedo_avanzar && (sensores.agentes[2] == 't')) {
+    puedo_avanzar = false; 
+  }
+
+if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
+
+    // Vemos que casilla ha sido menos visitada si la izq o la derecha
+    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
+      accion = last_action; 
+      // entonces realizamos el mismo giro que hicimos para completar el giro de 90º
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      // observamos a la derecha y a la izquierda (90 grados)
+      int visitas_i = INT_MAX;
+      int visitas_d = INT_MAX;
+
+      // obtenemos ubicacion de casilla derecha e izquierda (90º)
+      ubicacion izq = actual;
+      izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+      ubicacion casilla_i = Delante(izq);
+
+      ubicacion der = actual;
+      der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+      ubicacion casilla_d = Delante(der);
+
+
+      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+      }
+
+      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+      }
+
+      if (visitas_d <= visitas_i)
+        accion = TURN_SR;
+      else
+        accion = TURN_SL;
+        
+      last_action = accion;
+    }
+  }
+
+
+  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
+  if (giros_consecutivos >= 8)
+    accion =  IDLE; 
+
+  return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
 
 
@@ -697,8 +1038,8 @@ bool ComportamientoIngeniero::CasillaAccesibleTuberia(int f, int c, const vector
   if (f < 0 || f >= terreno.size() || c < 0 || c >= terreno[0].size()) return false;
   
   unsigned char t = terreno[f][c];
-  // Rechazamos Precipicios, Muros y Bosques
-  if (t == 'P' || t == 'M' || t == 'B') return false; 
+  // Rechazamos Precipicios, Muros y Bosques o Casilla desconocida (Nivel 6)
+  if (t == 'P' || t == 'M' || t == 'B' || t == '?') return false; 
   
   return true;
 }
@@ -914,13 +1255,6 @@ int ComportamientoIngeniero::VeoCasillaInteresante(char i, char c, char d, bool 
   return mejor_opcion;
 }
 
-/** @brief Determina la mejor opcion entre las 3 casillas que tiene delante
- * @param i    terreno que hay en la pos 1 (45izq)
- * @param c  terreno que hay en la pos 2 (delante)
- * @param d terreno que hay en la pos 3 (45derecha)
- * @param zap indica si tenemos o no las zapatillas
- * @return 2 si es mejor WALK, 1 TURN_SL, 3 TURN_SR. 0 si nada interesante
- */
 
 int ComportamientoIngeniero::VeoCasillaInteresanteNivel1(char i, char c, char d, bool zap, ubicacion actual){
 

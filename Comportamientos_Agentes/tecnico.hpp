@@ -79,6 +79,7 @@ public:
     giros_consecutivos = 0;
     turnos_aburrido = 0;
     giros_pendientes = 0;
+    modo_construccion = false;
   }
 
   /**
@@ -167,6 +168,13 @@ public:
  */
   Action ComportamientoTecnicoNivel_6(Sensores sensores);
 
+bool es_caminoNivel_6(unsigned char c) const;
+
+bool EsCasillaTransitableLevel6(int f, int c, bool zap);
+
+int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual);
+
+Action AdaptadaComportamientoTecnicoNivel_1(Sensores sensores);
 /**
  * @brief Comportamiento del técnico para el Nivel E.
  * @param sensores Datos actuales de los sensores.
@@ -314,6 +322,9 @@ private:
   bool tengo_orden = false;
   int destino_c;
   int destino_f;
+
+  // Nivel 6
+  bool modo_construccion;  // Para bloquerlo cuando este construyendo tuberias
 };
 
 #endif

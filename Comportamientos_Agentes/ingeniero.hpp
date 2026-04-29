@@ -113,7 +113,12 @@ public:
     giros_pendientes=0;
     hayPlan=false;
     plan=list<Action>();
-
+    tramo_actual = 0;
+    terreno_preparado = false;
+    esperando_tecnico = false;
+    esperando_install = false;
+    llamado_en_ini = false;
+    intento_plan = 0;
   }
 
   /**
@@ -134,6 +139,9 @@ public:
     plan=list<Action>();
     tramo_actual = 0;
     terreno_preparado = false;
+    esperando_tecnico = false;
+    esperando_install = false;
+    llamado_en_ini = false;
   }
   
 
@@ -209,6 +217,14 @@ public:
    * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_6(Sensores sensores);
+
+  bool es_caminoNivel_6(unsigned char c) const;
+
+  bool EsCasillaTransitableLevel6(int f, int c, bool tieneZapatillas);
+
+  int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual);
+
+  Action AdaptadaComportamientoIngenieroNivel_1(Sensores sensores);
 
   int HeuristicaTuberia(int f, int c, const vector<pair<int, int>> &plantas);
 
@@ -369,6 +385,9 @@ private:
   bool esperando_tecnico = false; // para saber si he avisado o no al tecnico en un tramo
   bool esperando_install = false; // Para sincronizar el turno del motor
   bool llamado_en_ini = false;
+
+  // Nivel 6
+  int intento_plan;
 };
 
 #endif
