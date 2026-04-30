@@ -525,7 +525,13 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
  */
 
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-  if (sensores.posF != -1) ActualizarMapa(sensores);
+
+  // Actualización de mapa y de zapatillas
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
+  }
+
   Action accion_final = IDLE;
 
   if (sensores.venpaca || tengo_orden) modo_construccion = true; 
@@ -627,8 +633,17 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
   if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
       visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
     
-  // --- INSTINTO DIRECCIONAL: Distancia Manhattan hacia la Belkanita ---
-  // Si belF es -1 (no la sabemos), la distancia será 0 para no influir.
+  // --- INSTINTO DIRECCIONAL CONDICIONADO ---
+  int dist_actual = (belF != -1) ? abs(actual.f - belF) + abs(actual.c - belC) : 0;
+  
+  // Umbral dinámico mejorado:
+  int umbral_iman = 15; // Por defecto para mapas pequeños (<= 30)
+  if (mapaResultado.size() > 30) {
+    umbral_iman = mapaResultado.size() / 3;
+  }
+  
+  bool lejos = (dist_actual > umbral_iman); // Apagamos el imán si estamos dentro del umbral
+
   int dist_i = (belF != -1) ? abs(casilla_i.f - belF) + abs(casilla_i.c - belC) : 0;
   int dist_c = (belF != -1) ? abs(casilla_c.f - belF) + abs(casilla_c.c - belC) : 0;
   int dist_d = (belF != -1) ? abs(casilla_d.f - belF) + abs(casilla_d.c - belC) : 0;
@@ -649,7 +664,7 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
   
   // Evaluamos IZQUIERDA
   if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
-    if (visitas_i < menor_visitas || (visitas_i == menor_visitas && dist_i < menor_distancia)) {
+    if (visitas_i < menor_visitas || (lejos && visitas_i == menor_visitas && dist_i < menor_distancia)) {
       menor_visitas = visitas_i;
       menor_distancia = dist_i;
       mejor_opcion = 1; // TURN_SL
@@ -658,7 +673,7 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
   
   // Evaluamos DERECHA
   if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
-    if (visitas_d < menor_visitas || (visitas_d == menor_visitas && dist_d < menor_distancia)) {
+    if (visitas_d < menor_visitas || (lejos && visitas_d == menor_visitas && dist_d < menor_distancia)) {
       menor_visitas = visitas_d;
       menor_distancia = dist_d;
       mejor_opcion = 3; // TURN_SR
@@ -833,6 +848,32 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
         accion = TURN_SR;
       else
         accion = TURN_SL;
+      
+      // -----------------------------------------------------------
+      /*
+      // --- INSTINTO DIRECCIONAL CONDICIONADO PARA GIROS DE 90 GRADOS ---
+      if (visitas_d < visitas_i) {
+        accion = TURN_SR;
+      } else if (visitas_i < visitas_d) {
+        accion = TURN_SL;
+      } else {
+        int dist_actual = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
+        
+        int umbral_iman = 15;  // umbral de 15 para mapas pequeños
+        if (mapaResultado.size() > 30) {
+          umbral_iman = mapaResultado.size() / 3; // mapa size / 3 para mapas "grandes"
+        }
+        
+        if (dist_actual > umbral_iman && sensores.BelPosF != -1) {
+          int dist_i = abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC);
+          int dist_d = abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC);
+          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
+        } else {
+          accion = TURN_SR; 
+        }
+      }
+      
+      */
         
       last_action = accion;
     }
@@ -1071,7 +1112,7 @@ bool ComportamientoTecnico::CasillaAccesibleTecnico(const EstadoT &st, const vec
     return false;
   }
 
-  // ¡OPTIMISMO!
+  // OPTIMISMO Caso nivel 6 asumimos que podemos pasar aunque sea '?'
   unsigned char t_curr = terreno[st.site.f][st.site.c];
   if (terreno[next.site.f][next.site.c] == '?' || t_curr == '?') return true;
 
