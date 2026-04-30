@@ -172,7 +172,8 @@ bool es_caminoNivel_6(unsigned char c) const;
 
 bool EsCasillaTransitableLevel6(int f, int c, bool zap);
 
-int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual);
+// int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual);
+int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC);
 
 Action AdaptadaComportamientoTecnicoNivel_1(Sensores sensores);
 /**

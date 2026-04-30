@@ -222,7 +222,7 @@ public:
 
   bool EsCasillaTransitableLevel6(int f, int c, bool tieneZapatillas);
 
-  int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual);
+  int VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC);
 
   Action AdaptadaComportamientoIngenieroNivel_1(Sensores sensores);
 

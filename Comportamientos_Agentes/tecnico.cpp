@@ -525,6 +525,37 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
  */
 
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
+  if (sensores.posF != -1) ActualizarMapa(sensores);
+  Action accion_final = IDLE;
+
+  if (sensores.venpaca || tengo_orden) modo_construccion = true; 
+
+  if (modo_construccion) {
+    // ¡FUERA ENVOLTORIOS!
+    accion_final = ComportamientoTecnicoNivel_5(sensores); 
+  } else {
+    accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
+  }  
+
+  // --- MEGA FILTRO SALVAVIDAS ---
+  if (accion_final == WALK) {
+    unsigned char obj = sensores.superficie[2];
+    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
+    bool altura_mala = (desnivel > 1); 
+
+    if (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || altura_mala) {
+      plan.clear(); hayPlan = false; return IDLE;
+    } else if (sensores.agentes[2] == 'i') {
+      return IDLE;
+    }
+  }
+  return accion_final;
+}
+
+
+
+/*
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
   // Actualización general
   if (sensores.posF != -1) ActualizarMapa(sensores);
 
@@ -561,25 +592,83 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
     return AdaptadaComportamientoTecnicoNivel_1(sensores);
   }  
 }
-
-/*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-  // Si nos llaman o recibimos orden, activamos el modo construcción permanentemente
-  if (sensores.venpaca || tengo_orden) {
-    modo_construccion = true; 
-  }
-
-  if (modo_construccion) {
-    // Una vez activado, ya NUNCA volverá a explorar, aunque se quede en IDLE
-    return ComportamientoTecnicoNivel_5(sensores); 
-  } else {
-    // NOTA: ¡He corregido el nombre aquí! En tu código habías puesto ComportamientoTecnicoNivel_1 
-    // en lugar de la versión Adaptada que acabas de programar.
-    return AdaptadaComportamientoTecnicoNivel_1(sensores);
-  }  
-}
 */
 
+int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC) {
+
+  // Buscamos las zapatillas si no las tenemos aun 
+  if (!tengo_zapatillas) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Calculamos ubicaciones de las casillas adyacentes
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // Procedemos a buscar el minimo de visitas
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // Asignamos el valor correspondiente si están en el rango
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+    
+  // --- INSTINTO DIRECCIONAL: Distancia Manhattan hacia la Belkanita ---
+  // Si belF es -1 (no la sabemos), la distancia será 0 para no influir.
+  int dist_i = (belF != -1) ? abs(casilla_i.f - belF) + abs(casilla_i.c - belC) : 0;
+  int dist_c = (belF != -1) ? abs(casilla_c.f - belF) + abs(casilla_c.c - belC) : 0;
+  int dist_d = (belF != -1) ? abs(casilla_d.f - belF) + abs(casilla_d.c - belC) : 0;
+
+  // Elegimos la casilla menos visitada y desempatamos por cercanía
+  int mejor_opcion = 0;  
+  int menor_visitas = INT_MAX;
+  int menor_distancia = INT_MAX; 
+
+  // Evaluamos FRENTE
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    if (visitas_c < menor_visitas || (visitas_c == menor_visitas && dist_c < menor_distancia)) {
+      menor_visitas = visitas_c;
+      menor_distancia = dist_c;
+      mejor_opcion = 2; // WALK
+    }
+  }
+  
+  // Evaluamos IZQUIERDA
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
+    if (visitas_i < menor_visitas || (visitas_i == menor_visitas && dist_i < menor_distancia)) {
+      menor_visitas = visitas_i;
+      menor_distancia = dist_i;
+      mejor_opcion = 1; // TURN_SL
+    }
+  }
+  
+  // Evaluamos DERECHA
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
+    if (visitas_d < menor_visitas || (visitas_d == menor_visitas && dist_d < menor_distancia)) {
+      menor_visitas = visitas_d;
+      menor_distancia = dist_d;
+      mejor_opcion = 3; // TURN_SR
+    }
+  }
+
+  return mejor_opcion; 
+}
+
+/*
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual) {
 
   // Buscamos las zapatillas si no las tenemos aun 
@@ -636,6 +725,7 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 
   return mejor_opcion; 
 }
+  */
 
 Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
   // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
@@ -677,7 +767,7 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
   if (sensores.agentes[3] == 'i') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual);
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, sensores.BelPosF, sensores.BelPosC);
 
   if (pos == 2){
     giros_consecutivos = 0;
@@ -980,6 +1070,10 @@ bool ComportamientoTecnico::CasillaAccesibleTecnico(const EstadoT &st, const vec
     next.site.c < 0 || next.site.c >= terreno[0].size()) {
     return false;
   }
+
+  // ¡OPTIMISMO!
+  unsigned char t_curr = terreno[st.site.f][st.site.c];
+  if (terreno[next.site.f][next.site.c] == '?' || t_curr == '?') return true;
 
   bool check1 = false, check2 = false, check3 = false;
   check1 = terreno[next.site.f][next.site.c] != 'P' and terreno[next.site.f][next.site.c] != 'M';

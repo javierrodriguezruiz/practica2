@@ -622,93 +622,61 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
  */
 
  Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
-  // 1. ¡NUEVO! Actualizamos el mapa SIEMPRE, hagamos lo que hagamos.
-  // Así nunca estamos ciegos cuando ejecutamos una ruta del Nivel 5.
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-  }
-
+  if (sensores.posF != -1) ActualizarMapa(sensores);
   Action accion_final = IDLE;
 
   // FASE 1: Exploración y Planificación
-  if (plan_tuberia.empty()) {
-    if (sensores.BelPosF != -1 && sensores.BelPosC != -1) {
-      intento_plan++;
-      if (intento_plan % 15 == 0) {
-        EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-        vector<pair<int, int>> plantas;
+  if (plan_tuberia.empty() && sensores.BelPosF != -1 && sensores.BelPosC != -1) {
+    intento_plan++;
+    if (intento_plan % 15 == 0) {
+      EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
+      vector<pair<int, int>> plantas;
+      for (int f = 0; f < mapaResultado.size(); f++) 
+        for (int c = 0; c < mapaResultado[f].size(); c++) 
+          if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
 
-        for (int f = 0; f < mapaResultado.size(); f++) 
-          for (int c = 0; c < mapaResultado[f].size(); c++) 
-            if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-
-        if (!plantas.empty()) {
-          list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-          
-          if (!lista_plan.empty()) {
-            plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-            tramo_actual = 0;
-            esperando_tecnico = false; 
-            esperando_install = false; 
-            llamado_en_ini = false; 
-            hayPlan = false;
-            VisualizaRedTuberias(lista_plan);
-          }
+      if (!plantas.empty()) {
+        list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
+        if (!lista_plan.empty()) {
+          plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
+          tramo_actual = 0; esperando_tecnico = false; esperando_install = false; 
+          llamado_en_ini = false; hayPlan = false;
+          VisualizaRedTuberias(lista_plan);
         }
       }
     }
   }
 
-  // FASE 2: Decisión de Acción
-  // FASE 2: Decisión de Acción
+  // FASE 2: Ejecución
   if (plan_tuberia.empty()) {
-    // Si aún no hemos encontrado un plan viable, seguimos explorando el mapa
-    return AdaptadaComportamientoIngenieroNivel_1(sensores);
+    accion_final = AdaptadaComportamientoIngenieroNivel_1(sensores);
   } else {
-    // === PATRÓN ENVOLTORIO PARA PROTEGER EL NIVEL 5 ===
-    
-    // 1. Guardamos y enmascaramos las casillas '?' como 'M' (Muros)
-    vector<pair<int,int>> modificadas;
-    for (int f = 0; f < mapaResultado.size(); f++) {
-      for (int c = 0; c < mapaResultado[f].size(); c++) {
-        if (mapaResultado[f][c] == '?') {
-          mapaResultado[f][c] = 'M';
-          modificadas.push_back({f, c});
-        }
-      }
-    }
-
-    // 2. Llamamos al Nivel 5 como caja negra. 
-    // Sus algoritmos de búsqueda (BFS) verán los 'M' y jamás trazarán rutas por lo desconocido.
-    Action accion_final = ComportamientoIngenieroNivel_5(sensores);
-
-    // 3. Restauramos las casillas a '?' 
-    // Comprobamos que siga siendo 'M' por si el propio Nivel 5 actualizó el mapa
-    // descubriendo un terreno real en ese turno.
-    for (auto &p : modificadas) {
-      if (mapaResultado[p.first][p.second] == 'M') {
-        mapaResultado[p.first][p.second] = '?';
-      }
-    }
-
-    // Ya podemos devolver la acción segura
-    return accion_final; 
+    // ¡FUERA ENVOLTORIOS! Dejamos que Nivel 5 haga su magia natural
+    accion_final = ComportamientoIngenieroNivel_5(sensores); 
   }
 
-  // 3. --- MEGA FILTRO SALVAVIDAS ---
-  // Interceptamos la acción antes de enviarla. Si el Nivel 5 nos manda a la muerte, lo paramos.
+  // 3. --- MEGA FILTRO SALVAVIDAS (Ahora protege también los saltos) ---
   if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2]; // Lo que hay exactamente delante
+    unsigned char obj = sensores.superficie[2];
     int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
     bool altura_mala = (!tengo_zapatillas && desnivel > 1) || (tengo_zapatillas && desnivel > 2);
 
-    if (obj == 'P' || obj == 'M' || altura_mala) {
-      // Íbamos a matarnos o a chocar con un muro fantasma. ¡Abortamos ruta!
-      plan.clear();
-      hayPlan = false;
-      return IDLE; // El próximo turno recalculará la ruta con el mapa ya actualizado
+    if (obj == 'P' || obj == 'M' || obj == 'B' || altura_mala) {
+      plan.clear(); hayPlan = false; return IDLE;
     } else if (sensores.agentes[2] == 't') {
-      // Si nuestro compañero está bloqueando, solo esperamos en IDLE, sin borrar el plan
+      return IDLE;
+    }
+  } else if (accion_final == JUMP) {
+    // El salto aterriza 2 casillas adelante (índice 6)
+    unsigned char obj_int = sensores.superficie[2];
+    unsigned char obj_dest = sensores.superficie[6];
+    int desnivel = abs(sensores.cota[6] - sensores.cota[0]);
+    bool altura_mala = (!tengo_zapatillas && desnivel > 1) || (tengo_zapatillas && desnivel > 2);
+
+    if (obj_int == 'P' || obj_int == 'M' || obj_int == 'B' || 
+        obj_dest == 'P' || obj_dest == 'M' || obj_dest == 'B' || altura_mala) {
+      plan.clear(); hayPlan = false; return IDLE;
+    } else if (sensores.agentes[2] == 't' || sensores.agentes[6] == 't') {
       return IDLE;
     }
   }
@@ -782,6 +750,81 @@ bool ComportamientoIngeniero::EsCasillaTransitableLevel6(int f, int c, bool tien
   return es_caminoNivel_6(mapaResultado[f][c]); // Solo 'C', 'D', 'S' son transitables en Nivel 1
 }
 
+int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
+
+  // Buscamos las zapatillas, solo en caso de NO tenerlas ya
+  if (!zap) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  // Calculamos ubicaciones de las casillas adyacentes
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // Procedemos a buscar el minimo de visitas
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // Asignamos el valor correspondiente si están en el rango
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+    
+  // --- INSTINTO DIRECCIONAL: Distancia Manhattan hacia la Belkanita ---
+  // Si belF es -1 (no la sabemos), la distancia será 0 para no influir.
+  int dist_i = (belF != -1) ? abs(casilla_i.f - belF) + abs(casilla_i.c - belC) : 0;
+  int dist_c = (belF != -1) ? abs(casilla_c.f - belF) + abs(casilla_c.c - belC) : 0;
+  int dist_d = (belF != -1) ? abs(casilla_d.f - belF) + abs(casilla_d.c - belC) : 0;
+
+  // Elegimos la casilla menos visitada y desempatamos por cercanía
+  int mejor_opcion = 0;  
+  int menor_visitas = INT_MAX;
+  int menor_distancia = INT_MAX; 
+
+  // Evaluamos FRENTE
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    if (visitas_c < menor_visitas || (visitas_c == menor_visitas && dist_c < menor_distancia)) {
+      menor_visitas = visitas_c;
+      menor_distancia = dist_c;
+      mejor_opcion = 2; // WALK
+    }
+  }
+  
+  // Evaluamos IZQUIERDA
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
+    if (visitas_i < menor_visitas || (visitas_i == menor_visitas && dist_i < menor_distancia)) {
+      menor_visitas = visitas_i;
+      menor_distancia = dist_i;
+      mejor_opcion = 1; // TURN_SL
+    }
+  }
+  
+  // Evaluamos DERECHA
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
+    if (visitas_d < menor_visitas || (visitas_d == menor_visitas && dist_d < menor_distancia)) {
+      menor_visitas = visitas_d;
+      menor_distancia = dist_d;
+      mejor_opcion = 3; // TURN_SR
+    }
+  }
+
+  return mejor_opcion; 
+}
+
+/*
 int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual){
 
   // Buscamos las zapatillas, solo en caso de NO tenerlas ya
@@ -838,6 +881,7 @@ int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d,
 
   return mejor_opcion; 
 }
+  */
 
 Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores sensores)
 {
@@ -874,7 +918,7 @@ Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores 
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
 
   // Comprobamos ademas que el tecnico no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 't') i = 'P'; 
+  if (sensores.agentes[1] == 't') i = 'P';
   // si está, la 'marcamos' como precipicio para no pasar
   if (sensores.agentes[2] == 't'){
     last_action = TURN_SR;
@@ -883,7 +927,7 @@ Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores 
   if (sensores.agentes[3] == 't') d = 'P';
 
   // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual);
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, sensores.BelPosF, sensores.BelPosC);
 
   if (pos == 2){
     giros_consecutivos = 0;
@@ -945,11 +989,32 @@ if (puedo_avanzar){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
       }
 
+      /*
       if (visitas_d <= visitas_i)
         accion = TURN_SR;
       else
         accion = TURN_SL;
+      */
+
+
+      // --- ¡NUEVO! INSTINTO DIRECCIONAL PARA GIROS DE 90 GRADOS ---
+      if (visitas_d < visitas_i) {
+        accion = TURN_SR;
+      } else if (visitas_i < visitas_d) {
+        accion = TURN_SL;
+      } else {
+        // Empate en visitas: desempatamos por cercanía a la Belkanita
+        int dist_i = abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC);
+        int dist_d = abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC);
         
+        if (dist_d <= dist_i) {
+          accion = TURN_SR;
+        } else {
+          accion = TURN_SL;
+        }
+      }
+      // -----------------------------------------------------------
+                
       last_action = accion;
     }
   }
@@ -1701,6 +1766,10 @@ bool ComportamientoIngeniero::CasillaAccesibleIngeniero(const EstadoI &st, const
   
   unsigned char t = terreno[next.site.f][next.site.c];
   if (t == 'P' || t == 'M' || t == 'B') return false; // Intransitables son precipicio, muro y bosque
+
+  // ¡OPTIMISMO!
+  unsigned char curr_t = terreno[st.site.f][st.site.c];
+  if (t == '?' || curr_t == '?') return true;
   
   int dif = abs((int)altura[next.site.f][next.site.c] - (int)altura[st.site.f][st.site.c]);
   if ((!st.zapatillas && dif <= 1) || (st.zapatillas && dif <= 2)) return true; // con zap <=2
@@ -1727,6 +1796,10 @@ bool ComportamientoIngeniero::CasillaAccesibleSalto(const EstadoI &st,
 
   unsigned char td = terreno[destino.site.f][destino.site.c];
   if (td == 'P' || td == 'M' || td == 'B') return false;
+
+  // ¡OPTIMISMO!
+  unsigned char curr_t = terreno[st.site.f][st.site.c];
+  if (td == '?' || curr_t == '?') return true;
 
   // Diferencia de altura entre INICIO y DESTINO FINAL
   int dif = abs((int)altura[destino.site.f][destino.site.c] - 
