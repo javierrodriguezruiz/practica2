@@ -532,6 +532,13 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
     if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
   }
 
+  // Si estamos en los primeros 15 turnos --> IDLE para reservar energia y dejar 
+  // al ingeniero que vaya explorando
+  if (turnos_IDLE < 250 && !sensores.venpaca){
+    turnos_IDLE++;
+    return IDLE;
+  }
+
   Action accion_final = IDLE;
 
   if (sensores.venpaca || tengo_orden) modo_construccion = true; 

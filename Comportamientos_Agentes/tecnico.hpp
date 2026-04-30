@@ -80,6 +80,7 @@ public:
     turnos_aburrido = 0;
     giros_pendientes = 0;
     modo_construccion = false;
+    turnos_IDLE = 0;
   }
 
   /**
@@ -326,6 +327,7 @@ private:
 
   // Nivel 6
   bool modo_construccion;  // Para bloquerlo cuando este construyendo tuberias
+  int turnos_IDLE;
 };
 
 #endif
