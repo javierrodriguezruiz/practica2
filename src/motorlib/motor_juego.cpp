@@ -493,7 +493,7 @@ bool actuacionIngeniero(unsigned char celdaJ_inicial, unsigned char celdaJ_fin,
     break;
 
   case IDLE:
-    if (celdaJ_inicial == 'X' and monitor.getLevel() == 7 or
+    if (celdaJ_inicial == 'X' and monitor.getLevel() == 6 or
         monitor.getLevel() == 1) { // Casilla Rosa (Recarga)
       monitor.get_entidad(0)->increaseBateria(10);
     }
@@ -771,7 +771,7 @@ bool actuacionTecnico(unsigned char celdaJ_inicial, unsigned char celdaJ_fin,
   case IDLE:
     if (celdaJ_inicial == 'X' and
         (monitor.getLevel() == 1 or
-         monitor.getLevel() == 7)) { // Casilla Rosa (Recarga)
+         monitor.getLevel() == 6)) { // Casilla Rosa (Recarga)
       monitor.get_entidad(1)->increaseBateria(10);
     }
 
