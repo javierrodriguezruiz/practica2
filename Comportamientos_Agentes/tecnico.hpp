@@ -81,6 +81,8 @@ public:
     giros_pendientes = 0;
     modo_construccion = false;
     turnos_IDLE = 0;
+    belkanita_encontrada = false;
+    cont_come = 0;
   }
 
   /**
@@ -328,6 +330,10 @@ private:
   // Nivel 6
   bool modo_construccion;  // Para bloquerlo cuando este construyendo tuberias
   int turnos_IDLE;
+  bool belkanita_encontrada;
+  int cont_come; // contador de las veces que nos ha llamado ingeniero, para controlar si es la primera 
+  // condiciones de casillas 
+  bool agua_permitida = false;
 };
 
 #endif

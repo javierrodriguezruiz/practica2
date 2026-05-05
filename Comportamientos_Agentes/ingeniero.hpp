@@ -119,6 +119,7 @@ public:
     esperando_install = false;
     llamado_en_ini = false;
     intento_plan = 0;
+    belkanita_encontrada = false;
   }
 
   /**
@@ -388,6 +389,7 @@ private:
 
   // Nivel 6
   int intento_plan;
+  bool belkanita_encontrada;
 };
 
 #endif
