@@ -622,78 +622,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
  */
 
  Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
-  }
-  Action accion_final = IDLE;
-
-  // FASE 1: Exploración y Planificación
-  if (plan_tuberia.empty() && sensores.BelPosF != -1 && sensores.BelPosC != -1) {
-    static int ultimas_desc = 0;
-    int desc_actual = 0;
-    
-    vector<pair<int, int>> plantas;
-    for (int f = 0; f < mapaResultado.size(); f++) {
-      for (int c = 0; c < mapaResultado[f].size(); c++) {
-        if (mapaResultado[f][c] != '?') desc_actual++;
-        if (mapaResultado[f][c] == 'U') plantas.push_back({f, c});
-      }
-    }
-
-    // Solo probamos el pesado algoritmo A* si hemos descubierto 30 casillas nuevas
-    if (!plantas.empty() && desc_actual > ultimas_desc + 30) {
-      ultimas_desc = desc_actual;
-      EstadoTub inicio = {(int)sensores.BelPosF, (int)sensores.BelPosC, (int)mapaCotas[sensores.BelPosF][sensores.BelPosC]};
-      list<Paso> lista_plan = AlgoritmoAEstrellaTub(inicio, plantas, mapaResultado, mapaCotas, sensores);
-      
-      if (!lista_plan.empty()) {
-        plan_tuberia.assign(lista_plan.begin(), lista_plan.end());
-        tramo_actual = 0; esperando_tecnico = false; esperando_install = false; 
-        llamado_en_ini = false; hayPlan = false;
-        VisualizaRedTuberias(lista_plan);
-      }
-    }
-  }
-
-  // FASE 2: Ejecución
-  if (plan_tuberia.empty()) {
-    accion_final = AdaptadaComportamientoIngenieroNivel_1(sensores);
-  } else {
-    // ¡FUERA ENVOLTORIOS DE NIEBLA! El A* de movimiento rodeará los obstáculos al descubrirlos
-    accion_final = ComportamientoIngenieroNivel_5(sensores); 
-  }
-
-  // 3. --- MEGA FILTRO SALVAVIDAS ---
-  if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2];
-    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
-    bool altura_mala = (!tengo_zapatillas && desnivel > 1) || (tengo_zapatillas && desnivel > 2);
-
-    if (obj == 'P' || obj == 'M' || obj == 'B' || altura_mala) {
-      plan.clear(); hayPlan = false; return IDLE;
-    } else if (sensores.agentes[2] == 't') {
-      return IDLE;
-    }
-  } else if (accion_final == JUMP) {
-    unsigned char obj_int = sensores.superficie[2];
-    unsigned char obj_dest = sensores.superficie[6];
-    int desnivel = abs(sensores.cota[6] - sensores.cota[0]);
-    bool altura_mala = (!tengo_zapatillas && desnivel > 1) || (tengo_zapatillas && desnivel > 2);
-
-    if (obj_int == 'P' || obj_int == 'M' || obj_int == 'B' || 
-        obj_dest == 'P' || obj_dest == 'M' || obj_dest == 'B' || altura_mala) {
-      plan.clear(); hayPlan = false; return IDLE;
-    } else if (sensores.agentes[2] == 't' || sensores.agentes[6] == 't') {
-      return IDLE;
-    }
-  }
-
-  return accion_final;
-}
-
-/*
- Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
   // Actualizamos el mapa y las zapatillas 
   if (sensores.posF != -1) {
     ActualizarMapa(sensores);
@@ -759,7 +687,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
 
   return accion_final;
 }
-  */
 
 /*
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores) {
@@ -828,6 +755,80 @@ bool ComportamientoIngeniero::EsCasillaTransitableLevel6(int f, int c, bool tien
 }
 
 
+int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c){
+  if (!zap) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+  ubicacion casilla_c = Delante(actual);
+  ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // 1. Calculamos distancias hacia el objetivo que nos han pasado
+  bool usar_iman = (target_f != -1); 
+
+  int dist_actual = usar_iman ? abs(actual.f - target_f) + abs(actual.c - target_c) : 0;
+  int dist_i = usar_iman ? abs(casilla_i.f - target_f) + abs(casilla_i.c - target_c) : 0;
+  int dist_c = usar_iman ? abs(casilla_c.f - target_f) + abs(casilla_c.c - target_c) : 0;
+  int dist_d = usar_iman ? abs(casilla_d.f - target_f) + abs(casilla_d.c - target_c) : 0;
+
+  // 2. Asignamos visitas con la PENALIZACIÓN DE AGUA
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
+          if (usar_iman && dist_i < dist_actual) visitas_i += 1; 
+          else visitas_i += 50; 
+      }
+  }
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') {
+          if (usar_iman && dist_c < dist_actual) visitas_c += 1;
+          else visitas_c += 50;
+      }
+  }
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
+          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
+          else visitas_d += 50;
+      }
+  }
+
+  // 3. Elegimos la mejor opción
+  int mejor_opcion = 0;  
+  int menor_visitas = INT_MAX;
+  int menor_distancia = INT_MAX; 
+
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
+      menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
+    }
+  }
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
+    if (visitas_i < menor_visitas || (usar_iman && visitas_i == menor_visitas && dist_i < menor_distancia)) {
+      menor_visitas = visitas_i; menor_distancia = dist_i; mejor_opcion = 1; 
+    }
+  }
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
+    if (visitas_d < menor_visitas || (usar_iman && visitas_d == menor_visitas && dist_d < menor_distancia)) {
+      menor_visitas = visitas_d; menor_distancia = dist_d; mejor_opcion = 3; 
+    }
+  }
+
+  return mejor_opcion; 
+}
+
+/* VERSION 15/17 PERO NO NIVEL 5
 int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
   if (!zap) {
     if (c == 'D') return 2;
@@ -904,6 +905,7 @@ int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d,
 
   return mejor_opcion; 
 }
+  */
 
 /*
 int ComportamientoIngeniero::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
@@ -991,6 +993,147 @@ Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores 
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
 
+  if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
+
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0], tengo_zapatillas);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0], tengo_zapatillas);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tengo_zapatillas);
+
+  // Esquivar al técnico
+  if (sensores.agentes[1] == 't') i = 'P'; 
+  if (sensores.agentes[2] == 't'){ last_action = TURN_SR; return TURN_SR; }
+  if (sensores.agentes[3] == 't') d = 'P';
+
+  // =========================================================================
+  // EL IMÁN DE ONDAS EXPANSIVAS (Sin modificar el .hpp)
+  // =========================================================================
+  int dist_a_bel = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
+  if (dist_a_bel <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
+
+  int iman_f = sensores.BelPosF;
+  int iman_c = sensores.BelPosC;
+  bool usar_iman = (sensores.BelPosF != -1);
+
+  if (belkanita_encontrada && usar_iman) {
+      int min_d_bel = INT_MAX;
+      int min_d_ag = INT_MAX;
+      int best_f = -1, best_c = -1;
+
+      // Buscamos la casilla '?' MÁS CERCANA a la Belkanita
+      for (int r = 0; r < mapaResultado.size(); r++) {
+          for (int col = 0; col < mapaResultado[0].size(); col++) {
+              if (mapaResultado[r][col] == '?') {
+                  int d_bel = abs(r - sensores.BelPosF) + abs(col - sensores.BelPosC);
+                  // Prioridad 1: Cercanía a la Belkanita (Efecto espiral)
+                  if (d_bel < min_d_bel) {
+                      min_d_bel = d_bel;
+                      best_f = r; best_c = col;
+                      min_d_ag = abs(r - actual.f) + abs(col - actual.c);
+                  } 
+                  // Prioridad 2: Desempate por cercanía al Ingeniero
+                  else if (d_bel == min_d_bel) {
+                      int d_ag = abs(r - actual.f) + abs(col - actual.c);
+                      if (d_ag < min_d_ag) {
+                          min_d_ag = d_ag;
+                          best_f = r; best_c = col;
+                      }
+                  }
+              }
+          }
+      }
+      
+      // Si encontramos niebla, ese es nuestro nuevo imán
+      if (best_f != -1) {
+          iman_f = best_f;
+          iman_c = best_c;
+      } else {
+          usar_iman = false; // Mapa totalmente descubierto
+          iman_f = -1; iman_c = -1;
+      }
+  }
+
+  // Le pasamos el IMÁN DINÁMICO a VeoCasilla en lugar de la posición fija de la Belkanita
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, iman_f, iman_c);
+
+  if (pos == 2) { giros_consecutivos = 0; return WALK; }
+  else if (pos == 1) { giros_consecutivos = 0; return TURN_SL; }
+  else if (pos == 3) { giros_consecutivos = 0; return TURN_SR; }
+  
+  Action accion = IDLE;
+  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, tengo_zapatillas) && !sensores.choque);
+
+  if (puedo_avanzar && (sensores.agentes[2] == 't')) puedo_avanzar = false; 
+
+  if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
+    if (giros_consecutivos%2 != 0){ 
+      accion = last_action; 
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      int visitas_i = INT_MAX, visitas_d = INT_MAX;
+
+      ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+      ubicacion casilla_i = Delante(izq);
+
+      ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+      ubicacion casilla_d = Delante(der);
+
+      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += 50;
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      }
+
+      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += 50;
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      }
+
+      if (visitas_d < visitas_i) {
+        accion = TURN_SR;
+      } else if (visitas_i < visitas_d) {
+        accion = TURN_SL;
+      } else {
+        // En empates, usamos el imán dinámico para decidir el giro
+        if (usar_iman) {
+          int dist_i = abs(casilla_i.f - iman_f) + abs(casilla_i.c - iman_c);
+          int dist_d = abs(casilla_d.f - iman_f) + abs(casilla_d.c - iman_c);
+          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
+        } else {
+          accion = TURN_SR; 
+        }
+      }
+      last_action = accion;
+    }
+  }
+
+  if (giros_consecutivos >= 8) accion = IDLE; 
+
+  return accion; 
+}
+
+
+/* VERSION 15/17 PERO NO NIVEL 5
+Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores sensores)
+{
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
+
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
+
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
   if (sensores.superficie[0] == 'D') {
     tengo_zapatillas = true;
   }
@@ -1056,47 +1199,24 @@ Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores 
       }
 
       // --- IMÁN DE UN SOLO USO PARA GIROS ---
-      // 1. Calculamos distancias e imán antes para poder juzgar el agua
       int dist_actual = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
       if (dist_actual <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
+      
       bool usar_iman = !belkanita_encontrada && (sensores.BelPosF != -1);
 
-      int dist_i = (sensores.BelPosF != -1) ? abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC) : 0;
-      int dist_d = (sensores.BelPosF != -1) ? abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC) : 0;
-
-      // 2. Extraemos visitas de izquierda
-      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i, tengo_zapatillas)){
-        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
-          if (usar_iman && dist_i < dist_actual) visitas_i += 1;
-          else visitas_i += 50;
-        }
-      }
-
-      // 3. Extraemos visitas de derecha
-      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d, tengo_zapatillas)){
-        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
-          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
-          else visitas_d += 50;
-        }
-      }
-
-      // 4. INSTINTO DIRECCIONAL PARA GIROS DE 90 GRADOS
       if (visitas_d < visitas_i) {
         accion = TURN_SR;
       } else if (visitas_i < visitas_d) {
         accion = TURN_SL;
       } else {
         if (usar_iman) {
+          int dist_i = abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC);
+          int dist_d = abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC);
           accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
         } else {
           accion = TURN_SR; 
         }
       }
-        
       last_action = accion;
     }
   }
@@ -1105,6 +1225,7 @@ Action ComportamientoIngeniero::AdaptadaComportamientoIngenieroNivel_1(Sensores 
 
   return accion; 
 }
+  */
 
 // Heuristica para la eleccion de tuberias, usamos la distancia de manhattan ya que 
 // ahora si que solo se pueden usar orientaciones ortogonales (norte,sur,este,oeste)

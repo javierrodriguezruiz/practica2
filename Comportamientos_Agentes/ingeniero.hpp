@@ -390,6 +390,6 @@ private:
   // Nivel 6
   int intento_plan;
   bool belkanita_encontrada;
-};
+};  
 
 #endif

@@ -769,6 +769,86 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
 }
 */
 
+int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c) {
+
+  // Buscamos las zapatillas si no las tenemos aun 
+  if (!tengo_zapatillas) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  ubicacion izq = actual;
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+
+  ubicacion casilla_c = Delante(actual);
+
+  ubicacion der = actual;
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  // 1. Calculamos distancias hacia el objetivo que nos han pasado
+  bool usar_iman = (target_f != -1); 
+
+  int dist_actual = usar_iman ? abs(actual.f - target_f) + abs(actual.c - target_c) : 0;
+  int dist_i = usar_iman ? abs(casilla_i.f - target_f) + abs(casilla_i.c - target_c) : 0;
+  int dist_c = usar_iman ? abs(casilla_c.f - target_f) + abs(casilla_c.c - target_c) : 0;
+  int dist_d = usar_iman ? abs(casilla_d.f - target_f) + abs(casilla_d.c - target_c) : 0;
+
+  // 2. Asignamos visitas y penalizaciones
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
+          if (usar_iman && dist_i < dist_actual) visitas_i += 1; 
+          else visitas_i += 50; 
+      }
+  }
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') {
+          if (usar_iman && dist_c < dist_actual) visitas_c += 1;
+          else visitas_c += 50;
+      }
+  }
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
+          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
+          else visitas_d += 50;
+      }
+  }
+
+  // 3. Elegimos la mejor opción
+  int mejor_opcion = 0;  
+  int menor_visitas = INT_MAX;
+  int menor_distancia = INT_MAX; 
+
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
+      menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
+    }
+  }
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
+    if (visitas_i < menor_visitas || (usar_iman && visitas_i == menor_visitas && dist_i < menor_distancia)) {
+      menor_visitas = visitas_i; menor_distancia = dist_i; mejor_opcion = 1; 
+    }
+  }
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
+    if (visitas_d < menor_visitas || (usar_iman && visitas_d == menor_visitas && dist_d < menor_distancia)) {
+      menor_visitas = visitas_d; menor_distancia = dist_d; mejor_opcion = 3; 
+    }
+  }
+
+  return mejor_opcion; 
+}
+
+/*
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
   if (!zap) {
     if (c == 'D') return 2;
@@ -845,6 +925,7 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 
   return mejor_opcion; 
 }
+  */
 
 /*
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC) {
@@ -932,6 +1013,147 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 */
 
 
+Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
+
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
+
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  if (sensores.superficie[0] == 'D') {
+    tengo_zapatillas = true;
+  }
+
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
+
+  // Esquivar al ingeniero
+  if (sensores.agentes[1] == 'i') i = 'P'; 
+  if (sensores.agentes[2] == 'i') c = 'P';
+  if (sensores.agentes[3] == 'i') d = 'P';
+
+  // =========================================================================
+  // EL IMÁN DE ONDAS EXPANSIVAS PARA EL TÉCNICO
+  // =========================================================================
+  int dist_a_bel = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
+  if (dist_a_bel <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
+
+  int iman_f = sensores.BelPosF;
+  int iman_c = sensores.BelPosC;
+  bool usar_iman = (sensores.BelPosF != -1);
+
+  if (belkanita_encontrada && usar_iman) {
+      int min_d_bel = INT_MAX;
+      int min_d_ag = INT_MAX;
+      int best_f = -1, best_c = -1;
+
+      for (int r = 0; r < mapaResultado.size(); r++) {
+          for (int col = 0; col < mapaResultado[0].size(); col++) {
+              if (mapaResultado[r][col] == '?') {
+                  int d_bel = abs(r - sensores.BelPosF) + abs(col - sensores.BelPosC);
+                  if (d_bel < min_d_bel) {
+                      min_d_bel = d_bel;
+                      best_f = r; best_c = col;
+                      min_d_ag = abs(r - actual.f) + abs(col - actual.c);
+                  } else if (d_bel == min_d_bel) {
+                      int d_ag = abs(r - actual.f) + abs(col - actual.c);
+                      if (d_ag < min_d_ag) {
+                          min_d_ag = d_ag;
+                          best_f = r; best_c = col;
+                      }
+                  }
+              }
+          }
+      }
+      
+      if (best_f != -1) {
+          iman_f = best_f;
+          iman_c = best_c;
+      } else {
+          usar_iman = false;
+          iman_f = -1; iman_c = -1;
+      }
+  }
+
+  // Pasamos el imán dinámico a la función de evaluación
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, iman_f, iman_c);
+
+  if (pos == 2) { giros_consecutivos = 0; return WALK; }
+  else if (pos == 1) { giros_consecutivos = 0; return TURN_SL; }
+  else if (pos == 3) { giros_consecutivos = 0; return TURN_SR; }
+  
+  Action accion = IDLE;
+  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
+
+  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
+    puedo_avanzar = false; 
+  }
+  
+  if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
+    if (giros_consecutivos%2 != 0){ 
+      accion = last_action;
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      int visitas_i = INT_MAX;
+      int visitas_d = INT_MAX;
+
+      ubicacion izq = actual;
+      izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+      ubicacion casilla_i = Delante(izq);
+
+      ubicacion der = actual;
+      der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+      ubicacion casilla_d = Delante(der);
+
+      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += 50;
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      }
+
+      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += 50;
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      }
+
+      if (visitas_d < visitas_i) {
+        accion = TURN_SR;
+      } else if (visitas_i < visitas_d) {
+        accion = TURN_SL;
+      } else {
+        // En empates, usamos el imán dinámico para decidir el giro
+        if (usar_iman) {
+          int dist_i = abs(casilla_i.f - iman_f) + abs(casilla_i.c - iman_c);
+          int dist_d = abs(casilla_d.f - iman_f) + abs(casilla_d.c - iman_c);
+          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
+        } else {
+          accion = TURN_SR; 
+        }
+      }
+      last_action = accion;
+    }
+  }
+
+  if (giros_consecutivos >= 8) accion =  IDLE; 
+
+  return accion; 
+}
+
+/*
 Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
   // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
   // pasamos por T. Residuos.
@@ -1091,7 +1313,7 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
 
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
-
+*/
 
 
 /*
