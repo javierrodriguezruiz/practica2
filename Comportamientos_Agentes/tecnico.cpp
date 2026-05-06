@@ -524,7 +524,78 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
  * @return Acción a realizar.
  */
 
+ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
+  }
 
+  // Lógica del COME (Avisos del Ingeniero)
+  if (sensores.venpaca) {
+    cont_come++;
+    modo_construccion = true;
+    if (cont_come > 1) agua_permitida = true; // Si insiste, cruzamos por agua
+  }
+
+  // Ahorro de energía brutal en los primeros turnos
+  if (turnos_IDLE < 250 && !modo_construccion) {
+    turnos_IDLE++;
+    return IDLE;
+  }
+
+  Action accion_final = IDLE;
+
+  if (modo_construccion) {
+    vector<pair<int,int>> mod_agua;
+    bool evitar_agua = (cont_come <= 1 && !agua_permitida);
+
+    if (evitar_agua) {
+      for (int f = 0; f < mapaResultado.size(); f++) {
+        for (int c = 0; c < mapaResultado[f].size(); c++) {
+          if (mapaResultado[f][c] == 'A') {
+            mapaResultado[f][c] = 'M'; // Disfrazamos el agua de Muro para el A*
+            mod_agua.push_back({f, c});
+          }
+        }
+      }
+    }
+
+    accion_final = ComportamientoTecnicoNivel_5(sensores); 
+
+    for (auto &p : mod_agua) {
+      mapaResultado[p.first][p.second] = 'A'; // Restauramos el mapa
+    }
+
+    // EL FIX ANTI-ATASCOS: Si no hay ruta seca, le quitamos el miedo al agua
+    if (evitar_agua && plan.empty() && tengo_orden) {
+        agua_permitida = true; 
+        accion_final = ComportamientoTecnicoNivel_5(sensores); 
+    }
+
+  } else {
+    accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
+  }  
+
+  // --- MEGA FILTRO SALVAVIDAS ---
+  if (accion_final == WALK) {
+    unsigned char obj = sensores.superficie[2];
+    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
+    bool altura_mala = (desnivel > 1); 
+
+    bool obstaculo_mortal = (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || altura_mala);
+    bool prohibir_agua = (!agua_permitida && obj == 'A'); // Freno estricto si no hay permiso
+
+    if (obstaculo_mortal || prohibir_agua) {
+      plan.clear(); hayPlan = false; return IDLE;
+    } else if (sensores.agentes[2] == 'i') {
+      return IDLE;
+    }
+  }
+  
+  return accion_final;
+}
+
+/*
  Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
   // 1. Actualización constante del mapa
   if (sensores.posF != -1) {
@@ -603,6 +674,7 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
   
   return accion_final;
 }
+*/
 
 /*
  Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
@@ -682,93 +754,71 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
   */
 
 
+int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c) {
+
+  if (!tengo_zapatillas) {
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  ubicacion casilla_i = Delante(izq);
+  ubicacion casilla_c = Delante(actual);
+  ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+  ubicacion casilla_d = Delante(der);
+
+  bool usar_iman = (target_f != -1); 
+  int dist_actual = usar_iman ? abs(actual.f - target_f) + abs(actual.c - target_c) : 0;
+  int dist_i = usar_iman ? abs(casilla_i.f - target_f) + abs(casilla_i.c - target_c) : 0;
+  int dist_c = usar_iman ? abs(casilla_c.f - target_f) + abs(casilla_c.c - target_c) : 0;
+  int dist_d = usar_iman ? abs(casilla_d.f - target_f) + abs(casilla_d.c - target_c) : 0;
+
+  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
+
+  // ¡AQUÍ ESTÁ LA MAGIA! Si el agua está permitida (urgencia), duele menos (5). Si no, duele mucho (50).
+  int penalizacion_agua = agua_permitida ? 5 : 50; 
+
+  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
+      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += penalizacion_agua; 
+  }
+  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
+      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
+      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') visitas_c += penalizacion_agua;
+  }
+  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
+      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += penalizacion_agua;
+  }
+
+  int mejor_opcion = 0;  
+  int menor_visitas = INT_MAX;
+  int menor_distancia = INT_MAX; 
+
+  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
+      menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
+    }
+  }
+  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
+    if (visitas_i < menor_visitas || (usar_iman && visitas_i == menor_visitas && dist_i < menor_distancia)) {
+      menor_visitas = visitas_i; menor_distancia = dist_i; mejor_opcion = 1; 
+    }
+  }
+  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
+    if (visitas_d < menor_visitas || (usar_iman && visitas_d == menor_visitas && dist_d < menor_distancia)) {
+      menor_visitas = visitas_d; menor_distancia = dist_d; mejor_opcion = 3; 
+    }
+  }
+
+  return mejor_opcion; 
+}
 
 /*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-
-  // Actualización de mapa y de zapatillas
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
-  }
-
-  // revisamos si estamos en modo construccion
-  if (sensores.venpaca || tengo_orden) modo_construccion = true;
-
-  // Si no estamso en modo construccion y turnos < 250, entonces IDLE, guardamos energia
-  if (!modo_construccion && turnos_IDLE < 250) {
-    turnos_IDLE++;
-    return IDLE;
-  }
-
-  Action accion_final = IDLE; 
-
-  if (modo_construccion) {
-    // ¡FUERA ENVOLTORIOS!
-    accion_final = ComportamientoTecnicoNivel_5(sensores); 
-  } else {
-    accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
-  }  
-
-  // --- MEGA FILTRO SALVAVIDAS ---
-  if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2];
-    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
-    bool altura_mala = (desnivel > 1); 
-
-    if (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || obj == 'A' || altura_mala) {  // QUITADO OBJ == A
-      plan.clear(); 
-      hayPlan = false;
-      return IDLE;
-    } else if (sensores.agentes[2] == 'i') {
-      return IDLE;  // esperamos a que el ingeniero se quite
-    }
-  }
-  return accion_final;
-}
-*/
-
-
-/*
-Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-  // Actualización general
-  if (sensores.posF != -1) ActualizarMapa(sensores);
-
-  if (sensores.venpaca || tengo_orden) {
-    modo_construccion = true; 
-  }
-
-  if (modo_construccion) {
-    // === PATRÓN ENVOLTORIO PARA PROTEGER EL NIVEL 5 ===
-    
-    vector<pair<int,int>> modificadas;
-    for (int f = 0; f < mapaResultado.size(); f++) {
-      for (int c = 0; c < mapaResultado[f].size(); c++) {
-        if (mapaResultado[f][c] == '?') {
-          mapaResultado[f][c] = 'M';
-          modificadas.push_back({f, c});
-        }
-      }
-    }
-
-    // El Nivel 5 planificará su ruta sin pisar las casillas ciegas
-    Action accion_final = ComportamientoTecnicoNivel_5(sensores); 
-
-    // Restauramos
-    for (auto &p : modificadas) {
-      if (mapaResultado[p.first][p.second] == 'M') {
-        mapaResultado[p.first][p.second] = '?';
-      }
-    }
-
-    return accion_final;
-
-  } else {
-    return AdaptadaComportamientoTecnicoNivel_1(sensores);
-  }  
-}
-*/
-
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c) {
 
   // Buscamos las zapatillas si no las tenemos aun 
@@ -847,6 +897,7 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 
   return mejor_opcion; 
 }
+*/
 
 /*
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
@@ -1012,7 +1063,137 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 }
 */
 
+Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
+  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
+    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
+  }
 
+  if (sensores.posF != -1) {
+    ActualizarMapa(sensores);
+    mapaVisitados[sensores.posF][sensores.posC]++;
+  }
+
+  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
+  ubicacion delante = Delante(actual);
+
+  if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
+
+  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
+  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
+  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
+
+  if (sensores.agentes[1] == 'i') i = 'P'; 
+  if (sensores.agentes[2] == 'i') c = 'P';
+  if (sensores.agentes[3] == 'i') d = 'P';
+
+  // =========================================================================
+  // EL IMÁN DE ONDAS EXPANSIVAS (Sincronizado con el Ingeniero)
+  // =========================================================================
+  int dist_a_bel = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
+  if (dist_a_bel <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
+
+  int iman_f = sensores.BelPosF;
+  int iman_c = sensores.BelPosC;
+  bool usar_iman = (sensores.BelPosF != -1);
+
+  if (belkanita_encontrada && usar_iman) {
+      int min_d_bel = INT_MAX;
+      int min_d_ag = INT_MAX;
+      int best_f = -1, best_c = -1;
+
+      for (int r = 0; r < mapaResultado.size(); r++) {
+          for (int col = 0; col < mapaResultado[0].size(); col++) {
+              if (mapaResultado[r][col] == '?') {
+                  int d_bel = abs(r - sensores.BelPosF) + abs(col - sensores.BelPosC);
+                  if (d_bel < min_d_bel) {
+                      min_d_bel = d_bel;
+                      best_f = r; best_c = col;
+                      min_d_ag = abs(r - actual.f) + abs(col - actual.c);
+                  } else if (d_bel == min_d_bel) {
+                      int d_ag = abs(r - actual.f) + abs(col - actual.c);
+                      if (d_ag < min_d_ag) {
+                          min_d_ag = d_ag;
+                          best_f = r; best_c = col;
+                      }
+                  }
+              }
+          }
+      }
+      
+      if (best_f != -1) {
+          iman_f = best_f; iman_c = best_c;
+      } else {
+          usar_iman = false; iman_f = -1; iman_c = -1;
+      }
+  }
+
+  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, iman_f, iman_c);
+
+  if (pos == 2) { giros_consecutivos = 0; return WALK; }
+  else if (pos == 1) { giros_consecutivos = 0; return TURN_SL; }
+  else if (pos == 3) { giros_consecutivos = 0; return TURN_SR; }
+  
+  Action accion = IDLE;
+  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
+
+  if (puedo_avanzar && (sensores.agentes[2] == 'i')) puedo_avanzar = false; 
+  
+  if (puedo_avanzar){
+    accion = WALK;
+    giros_consecutivos = 0;
+  }
+  else{
+    if (giros_consecutivos%2 != 0){ 
+      accion = last_action;
+      giros_consecutivos++;
+    }
+    else{ 
+      giros_consecutivos++;
+      int visitas_i = INT_MAX, visitas_d = INT_MAX;
+
+      ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
+      ubicacion casilla_i = Delante(izq);
+
+      ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
+      ubicacion casilla_d = Delante(der);
+
+      int penalizacion_agua = agua_permitida ? 5 : 50; 
+
+      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
+        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += penalizacion_agua;
+        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+      }
+
+      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
+        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += penalizacion_agua;
+        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+      }
+
+      if (visitas_d < visitas_i) {
+        accion = TURN_SR;
+      } else if (visitas_i < visitas_d) {
+        accion = TURN_SL;
+      } else {
+        if (usar_iman) {
+          int dist_i = abs(casilla_i.f - iman_f) + abs(casilla_i.c - iman_c);
+          int dist_d = abs(casilla_d.f - iman_f) + abs(casilla_d.c - iman_c);
+          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
+        } else {
+          accion = TURN_SR; 
+        }
+      }
+      last_action = accion;
+    }
+  }
+
+  if (giros_consecutivos >= 8) accion =  IDLE; 
+
+  return accion; 
+}
+
+/*
 Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
   if (mapaVisitados.empty() && mapaResultado.size() > 0) {
     mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
@@ -1152,6 +1333,7 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
 
   return accion; 
 }
+  */
 
 /*
 Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
