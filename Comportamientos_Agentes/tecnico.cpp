@@ -525,19 +525,22 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
  */
 
  Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
+
+  // Actualizamos mapa y tengo_zapatillas (reactivo)
   if (sensores.posF != -1) {
     ActualizarMapa(sensores);
     if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
   }
 
-  // Lógica del COME (Avisos del Ingeniero)
+  // Lógica del COME: Si nos han llamado
   if (sensores.venpaca) {
     cont_come++;
-    modo_construccion = true;
-    if (cont_come > 1) agua_permitida = true; // Si insiste, cruzamos por agua
+    modo_construccion = true; // pasamos a modo construccion
+    if (cont_come > 1) agua_permitida = true; 
+    // Si estamos ya en mitad de construccion (no es el 1er COME), cruzamos por agua sin problema
   }
 
-  // Ahorro de energía brutal en los primeros turnos
+  // Ahorro de energia: en los primeros 250 turnos mientras no lo haya llamado el ing. IDLE
   if (turnos_IDLE < 250 && !modo_construccion) {
     turnos_IDLE++;
     return IDLE;
@@ -546,10 +549,11 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
   Action accion_final = IDLE;
 
   if (modo_construccion) {
-    vector<pair<int,int>> mod_agua;
+    vector<pair<int,int>> mod_agua; // casillas de agua modificadas
     bool evitar_agua = (cont_come <= 1 && !agua_permitida);
 
     if (evitar_agua) {
+      // recorremos el mapa y si es 'A' la convertimos a 'M' y la guardamos en mod_agua
       for (int f = 0; f < mapaResultado.size(); f++) {
         for (int c = 0; c < mapaResultado[f].size(); c++) {
           if (mapaResultado[f][c] == 'A') {
@@ -558,217 +562,74 @@ bool ComportamientoTecnico::EsCasillaTransitableLevel6(int f, int c, bool tieneZ
           }
         }
       }
-    }
+    } // Evitamos el agua porque cuesta mucha energia
 
-    accion_final = ComportamientoTecnicoNivel_5(sensores); 
+    accion_final = ComportamientoTecnicoNivel_5(sensores);  // llamamos al nivel 5
 
+    // Volvemos a restaurar el Agua tras llamar al nivel 5 y haber calculado A*
     for (auto &p : mod_agua) {
       mapaResultado[p.first][p.second] = 'A'; // Restauramos el mapa
-    }
+    } 
 
-    // EL FIX ANTI-ATASCOS: Si no hay ruta seca, le quitamos el miedo al agua
+    // Si no hay ruta sin pasar por agua y tenemos la orden COME, 
     if (evitar_agua && plan.empty() && tengo_orden) {
-        agua_permitida = true; 
-        accion_final = ComportamientoTecnicoNivel_5(sensores); 
+      agua_permitida = true; // no evitamos agua
+      accion_final = ComportamientoTecnicoNivel_5(sensores);  // volvemos a llamar al N5
     }
 
-  } else {
+  } else { // si no estamos en modo construccion --> investigamos (Nnivel 1)
     accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
   }  
 
-  // --- MEGA FILTRO SALVAVIDAS ---
+  // Filtro para WALK
   if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2];
+    unsigned char obj = sensores.superficie[2]; // casilla objetivo
     int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
-    bool altura_mala = (desnivel > 1); 
+    bool no_factible_altura = (desnivel > 1); 
 
-    bool obstaculo_mortal = (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || altura_mala);
-    bool prohibir_agua = (!agua_permitida && obj == 'A'); // Freno estricto si no hay permiso
+    
+    bool obstaculo_mortal = (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || no_factible_altura);
+    bool prohibir_agua = (!agua_permitida && obj == 'A');
 
+    // Si estamos ante un precipicio, muro, bosque sin zap o no accesible por altura
+    // o si hemos restringido el agua anteriormente y el objetivo es 'A'. Replaneamos
     if (obstaculo_mortal || prohibir_agua) {
-      plan.clear(); hayPlan = false; return IDLE;
-    } else if (sensores.agentes[2] == 'i') {
+      plan.clear(); 
+      hayPlan = false; // forzamos la creacion de un nuevo plan
+      return IDLE;
+    } else if (sensores.agentes[2] == 'i') { // filtro antichoque con ingeniero
       return IDLE;
     }
   }
   
   return accion_final;
 }
-
-/*
- Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-  // 1. Actualización constante del mapa
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
-  }
-
-  // 2. Lógica del COME
-  if (sensores.venpaca) {
-    cont_come++;
-    modo_construccion = true;
-    if (cont_come > 1) agua_permitida = true; // Si nos llama en plena obra, vía libre al agua
-  }
-
-  // 3. Ahorro de energía en los primeros turnos
-  if (turnos_IDLE < 250 && !modo_construccion) {
-    turnos_IDLE++;
-    return IDLE;
-  }
-
-  Action accion_final = IDLE;
-
-  if (modo_construccion) {
-    vector<pair<int,int>> mod_agua;
-    
-    // Si estamos en el primer viaje y aún intentamos salvar la batería evitando el agua
-    bool evitar_agua = (cont_come <= 1 && !agua_permitida);
-
-    if (evitar_agua) {
-      for (int f = 0; f < mapaResultado.size(); f++) {
-        for (int c = 0; c < mapaResultado[f].size(); c++) {
-          if (mapaResultado[f][c] == 'A') {
-            mapaResultado[f][c] = 'M'; // Tapamos SOLO el agua conocida
-            mod_agua.push_back({f, c});
-          }
-        }
-      }
-    }
-
-    accion_final = ComportamientoTecnicoNivel_5(sensores); 
-
-    // Restauramos el agua
-    for (auto &p : mod_agua) {
-      mapaResultado[p.first][p.second] = 'A';
-    }
-
-    // ¡EL FIX ANTI-ATASCOS! 
-    // Si intentamos rodear el agua pero el A* no encontró camino, significa que NO HAY RUTA SECA.
-    if (evitar_agua && plan.empty() && tengo_orden) {
-        agua_permitida = true; // Levantamos el veto al agua para siempre
-        accion_final = ComportamientoTecnicoNivel_5(sensores); // Recalculamos dejando que pise el agua
-    }
-
-  } else {
-    accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
-  }  
-
-  // --- MEGA FILTRO SALVAVIDAS ---
-  if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2];
-    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
-    bool altura_mala = (desnivel > 1); 
-
-    // ¡IMPORTANTE! El '?' NO SE BLOQUEA. Si es niebla, damos el paso con fe.
-    bool obstaculo_mortal = (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || altura_mala);
-    
-    // El agua solo frena al agente si la tenemos prohibida
-    bool prohibir_agua = (!agua_permitida && obj == 'A'); 
-
-    if (obstaculo_mortal || prohibir_agua) {
-      plan.clear(); hayPlan = false; return IDLE;
-    } else if (sensores.agentes[2] == 'i') {
-      return IDLE;
-    }
-  }
-  
-  return accion_final;
-}
-*/
-
-/*
- Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
-  // 1. Actualización constante del mapa y objetos
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
-  }
-
-    // --- LA LÓGICA DEL CONTADOR DE COME ---
-  if (sensores.venpaca) {
-    cont_come++;
-    modo_construccion = true; 
-  }
-
-  // 2. Ahorro de energía inicial
-  if (turnos_IDLE < 250 && !modo_construccion) { // turnos_IDLE < 250 && !sensores.venpaca
-    turnos_IDLE++;
-    return IDLE;
-  }
-
-  Action accion_final = IDLE;
-
-  if (modo_construccion) {
-    // === ENVOLTORIO ANTI-AGUA CONDICIONADO AL PRIMER VIAJE ===
-    vector<pair<int,int>> aguas;
-    
-    // Solo bloqueamos el agua si es la PRIMERA orden del ingeniero (el viaje largo)
-    if (cont_come <= 1) {
-      for (int f = 0; f < mapaResultado.size(); f++) {
-        for (int c = 0; c < mapaResultado[f].size(); c++) {
-          if (mapaResultado[f][c] == 'A') {
-            mapaResultado[f][c] = 'M';
-            aguas.push_back({f, c});
-          }
-        }
-      }
-    }
-
-    accion_final = ComportamientoTecnicoNivel_5(sensores); 
-
-    // Restauramos el agua
-    if (cont_come <= 1) {
-      for (auto &p : aguas) {
-        if (mapaResultado[p.first][p.second] == 'M') {
-          mapaResultado[p.first][p.second] = 'A';
-        }
-      }
-    }
-
-  } else {
-    // Si aún no hay órdenes, exploramos
-    accion_final = AdaptadaComportamientoTecnicoNivel_1(sensores);
-  }  
-
-  // 3. --- MEGA FILTRO SALVAVIDAS CONDICIONADO ---
-  if (accion_final == WALK) {
-    unsigned char obj = sensores.superficie[2];
-    int desnivel = abs(sensores.cota[2] - sensores.cota[0]);
-    bool altura_mala = (desnivel > 1); 
-
-    // Obstáculos mortales SIEMPRE se bloquean
-    bool obstaculo_mortal = (obj == 'P' || obj == 'M' || (obj == 'B' && !tengo_zapatillas) || altura_mala);
-    
-    // El agua SOLO se bloquea si estamos en el primer viaje
-    bool agua_prohibida = (cont_come <= 1 && obj == 'A');
-
-    if (obstaculo_mortal || agua_prohibida) {
-      plan.clear(); hayPlan = false; return IDLE;
-    } else if (sensores.agentes[2] == 'i') {
-      return IDLE;
-    }
-  }
-  
-  return accion_final;
-}
-  */
 
 
 int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c) {
-
+  
+  // Buscamos las zapatillas si no las tenemos aun 
   if (!tengo_zapatillas) {
     if (c == 'D') return 2;
     else if (i == 'D') return 1;
     else if (d == 'D') return 3;
   }
 
-  ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
+  // Calculamos las casillas de la izquierda, centro y derecha
+  ubicacion izq = actual; 
+  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
   ubicacion casilla_i = Delante(izq);
+
   ubicacion casilla_c = Delante(actual);
-  ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
+
+  ubicacion der = actual; 
+  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
   ubicacion casilla_d = Delante(der);
 
+  // Si tenemos un objetivo, entonces si usaremos el iman
   bool usar_iman = (target_f != -1); 
+
+  // Calculamos las dist de manhattan al objetivo desde las distintas posiciones
   int dist_actual = usar_iman ? abs(actual.f - target_f) + abs(actual.c - target_c) : 0;
   int dist_i = usar_iman ? abs(casilla_i.f - target_f) + abs(casilla_i.c - target_c) : 0;
   int dist_c = usar_iman ? abs(casilla_c.f - target_f) + abs(casilla_c.c - target_c) : 0;
@@ -776,30 +637,36 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
 
   int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
 
-  // ¡AQUÍ ESTÁ LA MAGIA! Si el agua está permitida (urgencia), duele menos (5). Si no, duele mucho (50).
+  // Si el agua está permitida, costará 5 para que el agente vaya por ella, de lo
+  // contrario, costará 50 para que el agente evite pisarla y perder energia
   int penalizacion_agua = agua_permitida ? 5 : 50; 
 
+  // Evaluamos casilla izquierda: limites mapa
   if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
       visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += penalizacion_agua; 
+    // evitamos hierba porque tambien cuesta energia (6) y por supuesto el agua 
+    if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
+    if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += penalizacion_agua; 
   }
   if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
       visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') visitas_c += penalizacion_agua;
+    if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
+    if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') visitas_c += penalizacion_agua;
   }
   if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
       visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += penalizacion_agua;
+    if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
+    if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += penalizacion_agua;
   }
 
   int mejor_opcion = 0;  
   int menor_visitas = INT_MAX;
   int menor_distancia = INT_MAX; 
 
+  // Calculamos ahora cual es la mejor opcion en funcion de la que tenga menos visitas
   if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
+    // si es menor que el minimo registrado hasta ahora o si estamos usando iman y 
+    // empatan pero la dist al objetivo es menor, lo preferimos
     if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
       menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
     }
@@ -818,256 +685,14 @@ int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, b
   return mejor_opcion; 
 }
 
-/*
-int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int target_f, int target_c) {
-
-  // Buscamos las zapatillas si no las tenemos aun 
-  if (!tengo_zapatillas) {
-    if (c == 'D') return 2;
-    else if (i == 'D') return 1;
-    else if (d == 'D') return 3;
-  }
-
-  ubicacion izq = actual;
-  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
-  ubicacion casilla_i = Delante(izq);
-
-  ubicacion casilla_c = Delante(actual);
-
-  ubicacion der = actual;
-  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
-  ubicacion casilla_d = Delante(der);
-
-  // 1. Calculamos distancias hacia el objetivo que nos han pasado
-  bool usar_iman = (target_f != -1); 
-
-  int dist_actual = usar_iman ? abs(actual.f - target_f) + abs(actual.c - target_c) : 0;
-  int dist_i = usar_iman ? abs(casilla_i.f - target_f) + abs(casilla_i.c - target_c) : 0;
-  int dist_c = usar_iman ? abs(casilla_c.f - target_f) + abs(casilla_c.c - target_c) : 0;
-  int dist_d = usar_iman ? abs(casilla_d.f - target_f) + abs(casilla_d.c - target_c) : 0;
-
-  // 2. Asignamos visitas y penalizaciones
-  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
-
-  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
-      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
-          if (usar_iman && dist_i < dist_actual) visitas_i += 1; 
-          else visitas_i += 50; 
-      }
-  }
-  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
-      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') {
-          if (usar_iman && dist_c < dist_actual) visitas_c += 1;
-          else visitas_c += 50;
-      }
-  }
-  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
-      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
-          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
-          else visitas_d += 50;
-      }
-  }
-
-  // 3. Elegimos la mejor opción
-  int mejor_opcion = 0;  
-  int menor_visitas = INT_MAX;
-  int menor_distancia = INT_MAX; 
-
-  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
-    if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
-      menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
-    }
-  }
-  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
-    if (visitas_i < menor_visitas || (usar_iman && visitas_i == menor_visitas && dist_i < menor_distancia)) {
-      menor_visitas = visitas_i; menor_distancia = dist_i; mejor_opcion = 1; 
-    }
-  }
-  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
-    if (visitas_d < menor_visitas || (usar_iman && visitas_d == menor_visitas && dist_d < menor_distancia)) {
-      menor_visitas = visitas_d; menor_distancia = dist_d; mejor_opcion = 3; 
-    }
-  }
-
-  return mejor_opcion; 
-}
-*/
-
-/*
-int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC){
-  if (!zap) {
-    if (c == 'D') return 2;
-    else if (i == 'D') return 1;
-    else if (d == 'D') return 3;
-  }
-
-  ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
-  ubicacion casilla_i = Delante(izq);
-  ubicacion casilla_c = Delante(actual);
-  ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
-  ubicacion casilla_d = Delante(der);
-
-  // 1. Calculamos distancias e imán PRIMERO
-  int dist_actual = (belF != -1) ? abs(actual.f - belF) + abs(actual.c - belC) : 0;
-  
-  // ¡NUEVO! Si estamos prácticamente encima, apagamos el imán para siempre
-  if (dist_actual <= 3 && belF != -1) belkanita_encontrada = true; 
-  bool usar_iman = !belkanita_encontrada && (belF != -1); 
-
-  int dist_i = (belF != -1) ? abs(casilla_i.f - belF) + abs(casilla_i.c - belC) : 0;
-  int dist_c = (belF != -1) ? abs(casilla_c.f - belF) + abs(casilla_c.c - belC) : 0;
-  int dist_d = (belF != -1) ? abs(casilla_d.f - belF) + abs(casilla_d.c - belC) : 0;
-
-  // 2. Asignamos visitas con la PENALIZACIÓN DE AGUA DINÁMICA
-  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
-
-  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size()) {
-      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
-          // Si nos acerca al imán, ¡el agua vale la pena! Penalización mínima.
-          if (usar_iman && dist_i < dist_actual) visitas_i += 1; 
-          else visitas_i += 50; // Si no, huimos del agua
-      }
-  }
-  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size()) {
-      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'H') visitas_c += 3;
-      if (mapaResultado[casilla_c.f][casilla_c.c] == 'A') {
-          if (usar_iman && dist_c < dist_actual) visitas_c += 1;
-          else visitas_c += 50;
-      }
-  }
-  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size()) {
-      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-      if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
-          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
-          else visitas_d += 50;
-      }
-  }
-
-  // 3. Elegimos la mejor opción
-  int mejor_opcion = 0;  
-  int menor_visitas = INT_MAX;
-  int menor_distancia = INT_MAX; 
-
-  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
-    if (visitas_c < menor_visitas || (usar_iman && visitas_c == menor_visitas && dist_c < menor_distancia)) {
-      menor_visitas = visitas_c; menor_distancia = dist_c; mejor_opcion = 2; 
-    }
-  }
-  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
-    if (visitas_i < menor_visitas || (usar_iman && visitas_i == menor_visitas && dist_i < menor_distancia)) {
-      menor_visitas = visitas_i; menor_distancia = dist_i; mejor_opcion = 1; 
-    }
-  }
-  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
-    if (visitas_d < menor_visitas || (usar_iman && visitas_d == menor_visitas && dist_d < menor_distancia)) {
-      menor_visitas = visitas_d; menor_distancia = dist_d; mejor_opcion = 3; 
-    }
-  }
-
-  return mejor_opcion; 
-}
-  */
-
-/*
-int ComportamientoTecnico::VeoCasillaInteresanteNivel6(char i, char c, char d, bool zap, ubicacion actual, int belF, int belC) {
-
-  // Buscamos las zapatillas si no las tenemos aun 
-  if (!tengo_zapatillas) {
-    if (c == 'D') return 2;
-    else if (i == 'D') return 1;
-    else if (d == 'D') return 3;
-  }
-
-  // Calculamos ubicaciones de las casillas adyacentes
-  ubicacion izq = actual;
-  izq.brujula = (Orientacion) (((int) actual.brujula + 7) % 8);
-  ubicacion casilla_i = Delante(izq);
-
-  ubicacion casilla_c = Delante(actual);
-
-  ubicacion der = actual;
-  der.brujula = (Orientacion) (((int) actual.brujula + 1) % 8);
-  ubicacion casilla_d = Delante(der);
-
-  // Procedemos a buscar el minimo de visitas
-  int visitas_i = INT_MAX, visitas_c = INT_MAX, visitas_d = INT_MAX;
-
-  // Asignamos el valor correspondiente si están en el rango
-  if (casilla_i.f >= 0 && casilla_i.f < mapaVisitados.size() && casilla_i.c >= 0 && casilla_i.c < mapaVisitados[0].size())
-      visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-
-  if (casilla_c.f >= 0 && casilla_c.f < mapaVisitados.size() && casilla_c.c >= 0 && casilla_c.c < mapaVisitados[0].size())
-      visitas_c = mapaVisitados[casilla_c.f][casilla_c.c];
-
-  if (casilla_d.f >= 0 && casilla_d.f < mapaVisitados.size() && casilla_d.c >= 0 && casilla_d.c < mapaVisitados[0].size())
-      visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-    
-  // --- INSTINTO DIRECCIONAL CONDICIONADO ---
-  int dist_actual = (belF != -1) ? abs(actual.f - belF) + abs(actual.c - belC) : 0;
-  
-  // Umbral dinámico mejorado:
-  int umbral_iman = 15; // Por defecto para mapas pequeños (<= 30)
-  if (mapaResultado.size() > 30) {
-    umbral_iman = mapaResultado.size() / 3;
-  }
-  
-  bool lejos = (dist_actual > umbral_iman); // Apagamos el imán si estamos dentro del umbral
-
-  int dist_i = (belF != -1) ? abs(casilla_i.f - belF) + abs(casilla_i.c - belC) : 0;
-  int dist_c = (belF != -1) ? abs(casilla_c.f - belF) + abs(casilla_c.c - belC) : 0;
-  int dist_d = (belF != -1) ? abs(casilla_d.f - belF) + abs(casilla_d.c - belC) : 0;
-
-  // Elegimos la casilla menos visitada y desempatamos por cercanía
-  int mejor_opcion = 0;  
-  int menor_visitas = INT_MAX;
-  int menor_distancia = INT_MAX; 
-
-  // Evaluamos FRENTE
-  if (c != 'P' && EsCasillaTransitableLevel6(casilla_c.f, casilla_c.c, zap)) {
-    if (visitas_c < menor_visitas || (visitas_c == menor_visitas && dist_c < menor_distancia)) {
-      menor_visitas = visitas_c;
-      menor_distancia = dist_c;
-      mejor_opcion = 2; // WALK
-    }
-  }
-  
-  // Evaluamos IZQUIERDA
-  if (i != 'P' && EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, zap)) {
-    if (visitas_i < menor_visitas || (lejos && visitas_i == menor_visitas && dist_i < menor_distancia)) {
-      menor_visitas = visitas_i;
-      menor_distancia = dist_i;
-      mejor_opcion = 1; // TURN_SL
-    }
-  }
-  
-  // Evaluamos DERECHA
-  if (d != 'P' && EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, zap)) {
-    if (visitas_d < menor_visitas || (lejos && visitas_d == menor_visitas && dist_d < menor_distancia)) {
-      menor_visitas = visitas_d;
-      menor_distancia = dist_d;
-      mejor_opcion = 3; // TURN_SR
-    }
-  }
-
-  return mejor_opcion; 
-}
-*/
 
 Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
+  // Inicializacion del mapa de memoria de casillas visitadas
   if (mapaVisitados.empty() && mapaResultado.size() > 0) {
     mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
   }
 
+  // actualizamos mapa y mapa de casillas visitadas
   if (sensores.posF != -1) {
     ActualizarMapa(sensores);
     mapaVisitados[sensores.posF][sensores.posC]++;
@@ -1076,79 +701,100 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
   ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
   ubicacion delante = Delante(actual);
 
+  // actualizamos sensor zapatillas
   if (sensores.superficie[0] == 'D') tengo_zapatillas = true;
 
+  // Comprobacion de alturas
   char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
   char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
   char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
 
+  // si esta el ingeniero delante marcamos como precipicio
   if (sensores.agentes[1] == 'i') i = 'P'; 
   if (sensores.agentes[2] == 'i') c = 'P';
   if (sensores.agentes[3] == 'i') d = 'P';
 
-  // =========================================================================
-  // EL IMÁN DE ONDAS EXPANSIVAS (Sincronizado con el Ingeniero)
-  // =========================================================================
+  // Queremos movernos hacia la belkanita en primera instancia (la conocemos con sensores)
   int dist_a_bel = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
+
+  // si la distancia <=3 significa que hemos pasado por al lado suya y explorado
+  // la zona de su alrededor, entonces ponemos a true la var de estado
   if (dist_a_bel <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
 
   int iman_f = sensores.BelPosF;
-  int iman_c = sensores.BelPosC;
+  int iman_c = sensores.BelPosC; // creamos un iman a la belkanita
   bool usar_iman = (sensores.BelPosF != -1);
 
+  // Una vez la hayamos encontrado, entonces usamos este iman para ir explorando
+  // zonas no descubiertas de manera progresiva (de mas cerca a mas lejos de la belk)
   if (belkanita_encontrada && usar_iman) {
-      int min_d_bel = INT_MAX;
-      int min_d_ag = INT_MAX;
-      int best_f = -1, best_c = -1;
+    int min_d_bel = INT_MAX;
+    int min_d_ag = INT_MAX;
+    int best_f = -1, best_c = -1;
 
-      for (int r = 0; r < mapaResultado.size(); r++) {
-          for (int col = 0; col < mapaResultado[0].size(); col++) {
-              if (mapaResultado[r][col] == '?') {
-                  int d_bel = abs(r - sensores.BelPosF) + abs(col - sensores.BelPosC);
-                  if (d_bel < min_d_bel) {
-                      min_d_bel = d_bel;
-                      best_f = r; best_c = col;
-                      min_d_ag = abs(r - actual.f) + abs(col - actual.c);
-                  } else if (d_bel == min_d_bel) {
-                      int d_ag = abs(r - actual.f) + abs(col - actual.c);
-                      if (d_ag < min_d_ag) {
-                          min_d_ag = d_ag;
-                          best_f = r; best_c = col;
-                      }
-                  }
-              }
+    // Recorremos el mapa
+    for (int f = 0; f < mapaResultado.size(); f++) {
+      for (int c = 0; c < mapaResultado[0].size(); c++) {
+        // Cuando encontremos una casilla no explorada: '?' 
+        if (mapaResultado[f][c] == '?') {
+          // distancia a la belkanita desde dicha casilla
+          int d_bel = abs(f - sensores.BelPosF) + abs(c - sensores.BelPosC);
+
+          // Actualizamos si es el minimo (mas cercana a la belkanita)
+          if (d_bel < min_d_bel) {
+            min_d_bel = d_bel;
+            best_f = f; best_c = c; // actualizamos la fila y col a la que ir 
+            min_d_ag = abs(f - actual.f) + abs(c - actual.c);
+          } else if (d_bel == min_d_bel) { // si la dist es igual a la minima encontrada
+
+            // vemos la distancia de la '?' al tecnico para ir a la mas cercana a él
+            int d_ag = abs(f - actual.f) + abs(c - actual.c); 
+            if (d_ag < min_d_ag) {  
+              min_d_ag = d_ag;
+              best_f = f; best_c = c;
+            }
           }
+        }
       }
-      
-      if (best_f != -1) {
-          iman_f = best_f; iman_c = best_c;
-      } else {
-          usar_iman = false; iman_f = -1; iman_c = -1;
-      }
+    }
+    
+    if (best_f != -1) {
+      iman_f = best_f; iman_c = best_c;
+    } else {
+      usar_iman = false; iman_f = -1; iman_c = -1;
+    }
   }
 
+  // Buscamos la casilla interesante una vez calculados (o no) los imanes (casilla a la que ir)
   int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, iman_f, iman_c);
 
   if (pos == 2) { giros_consecutivos = 0; return WALK; }
   else if (pos == 1) { giros_consecutivos = 0; return TURN_SL; }
   else if (pos == 3) { giros_consecutivos = 0; return TURN_SR; }
   
+  // Llegados a este punto pos == 0 por lo que debemos decidir que movimiento hacer
+  // pues ninguna casilla de nuestro alrededor nos interesa
   Action accion = IDLE;
   bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
 
   if (puedo_avanzar && (sensores.agentes[2] == 'i')) puedo_avanzar = false; 
   
+  // si podemos avanzar, entonces WALK
   if (puedo_avanzar){
     accion = WALK;
     giros_consecutivos = 0;
   }
-  else{
-    if (giros_consecutivos%2 != 0){ 
+  else{ // si no podemos avanzar
+    // Vemos que casilla ha sido menos visitada si la izq o la derecha
+
+    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
       accion = last_action;
+      // entonces realizamos el mismo giro que hicimos para completar el giro de 90º
       giros_consecutivos++;
     }
     else{ 
       giros_consecutivos++;
+      // observamos a la derecha y a la izquierda (90 grados)
       int visitas_i = INT_MAX, visitas_d = INT_MAX;
 
       ubicacion izq = actual; izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
@@ -1157,13 +803,14 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
       ubicacion der = actual; der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
       ubicacion casilla_d = Delante(der);
 
+      // penalizamos agua xq consume mucha energia
       int penalizacion_agua = agua_permitida ? 5 : 50; 
 
       if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
         visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
         if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += penalizacion_agua;
         if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      }
+      } // penalizamos por agua y por hierba minimamente
 
       if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
         visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
@@ -1176,7 +823,7 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
       } else if (visitas_i < visitas_d) {
         accion = TURN_SL;
       } else {
-        if (usar_iman) {
+        if (usar_iman) { // desempatamos por menor distancia al iman
           int dist_i = abs(casilla_i.f - iman_f) + abs(casilla_i.c - iman_c);
           int dist_d = abs(casilla_d.f - iman_f) + abs(casilla_d.c - iman_c);
           accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
@@ -1188,462 +835,11 @@ Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sens
     }
   }
 
-  if (giros_consecutivos >= 8) accion =  IDLE; 
-
-  return accion; 
-}
-
-/*
-Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
-  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
-    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
-  }
-
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    mapaVisitados[sensores.posF][sensores.posC]++;
-  }
-
-  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
-  ubicacion delante = Delante(actual);
-
-  if (sensores.superficie[0] == 'D') {
-    tengo_zapatillas = true;
-  }
-
-  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
-  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
-  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
-
-  // Esquivar al ingeniero
-  if (sensores.agentes[1] == 'i') i = 'P'; 
-  if (sensores.agentes[2] == 'i') c = 'P';
-  if (sensores.agentes[3] == 'i') d = 'P';
-
-  // =========================================================================
-  // EL IMÁN DE ONDAS EXPANSIVAS PARA EL TÉCNICO
-  // =========================================================================
-  int dist_a_bel = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
-  if (dist_a_bel <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
-
-  int iman_f = sensores.BelPosF;
-  int iman_c = sensores.BelPosC;
-  bool usar_iman = (sensores.BelPosF != -1);
-
-  if (belkanita_encontrada && usar_iman) {
-      int min_d_bel = INT_MAX;
-      int min_d_ag = INT_MAX;
-      int best_f = -1, best_c = -1;
-
-      for (int r = 0; r < mapaResultado.size(); r++) {
-          for (int col = 0; col < mapaResultado[0].size(); col++) {
-              if (mapaResultado[r][col] == '?') {
-                  int d_bel = abs(r - sensores.BelPosF) + abs(col - sensores.BelPosC);
-                  if (d_bel < min_d_bel) {
-                      min_d_bel = d_bel;
-                      best_f = r; best_c = col;
-                      min_d_ag = abs(r - actual.f) + abs(col - actual.c);
-                  } else if (d_bel == min_d_bel) {
-                      int d_ag = abs(r - actual.f) + abs(col - actual.c);
-                      if (d_ag < min_d_ag) {
-                          min_d_ag = d_ag;
-                          best_f = r; best_c = col;
-                      }
-                  }
-              }
-          }
-      }
-      
-      if (best_f != -1) {
-          iman_f = best_f;
-          iman_c = best_c;
-      } else {
-          usar_iman = false;
-          iman_f = -1; iman_c = -1;
-      }
-  }
-
-  // Pasamos el imán dinámico a la función de evaluación
-  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, iman_f, iman_c);
-
-  if (pos == 2) { giros_consecutivos = 0; return WALK; }
-  else if (pos == 1) { giros_consecutivos = 0; return TURN_SL; }
-  else if (pos == 3) { giros_consecutivos = 0; return TURN_SR; }
-  
-  Action accion = IDLE;
-  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
-
-  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
-    puedo_avanzar = false; 
-  }
-  
-  if (puedo_avanzar){
-    accion = WALK;
-    giros_consecutivos = 0;
-  }
-  else{
-    if (giros_consecutivos%2 != 0){ 
-      accion = last_action;
-      giros_consecutivos++;
-    }
-    else{ 
-      giros_consecutivos++;
-      int visitas_i = INT_MAX;
-      int visitas_d = INT_MAX;
-
-      ubicacion izq = actual;
-      izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
-      ubicacion casilla_i = Delante(izq);
-
-      ubicacion der = actual;
-      der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
-      ubicacion casilla_d = Delante(der);
-
-      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
-        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += 50;
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      }
-
-      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
-        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += 50;
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-      }
-
-      if (visitas_d < visitas_i) {
-        accion = TURN_SR;
-      } else if (visitas_i < visitas_d) {
-        accion = TURN_SL;
-      } else {
-        // En empates, usamos el imán dinámico para decidir el giro
-        if (usar_iman) {
-          int dist_i = abs(casilla_i.f - iman_f) + abs(casilla_i.c - iman_c);
-          int dist_d = abs(casilla_d.f - iman_f) + abs(casilla_d.c - iman_c);
-          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
-        } else {
-          accion = TURN_SR; 
-        }
-      }
-      last_action = accion;
-    }
-  }
-
-  if (giros_consecutivos >= 8) accion =  IDLE; 
-
-  return accion; 
-}
-  */
-
-/*
-Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
-  // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
-  // pasamos por T. Residuos.
-
-  // Inicializamos la matriz de mapas visitados
-  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
-    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
-  }
-
-  // actualizamos el mapa y la matriz de casillas visitadas
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    mapaVisitados[sensores.posF][sensores.posC]++;
-  }
-
-  // Obtenemos los datos de los sensores para observar si podemos avanzar
-  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
-  ubicacion delante = Delante(actual);
-
-  // Actualizamos variable tengo_zapatillas
-  if (sensores.superficie[0] == 'D') {
-    tengo_zapatillas = true;
-  }
-
-  // Condicion de parada en T. Residuos eliminada
-
-  
-  // BUSQUEDA DE CASILLAS OBJETIVO:
-  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
-  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
-  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
-  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
-
-  // Comprobamos ademas que el ingeniero no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 'i') i = 'P'; 
-  // si está, la 'marcamos' como precipicio para no pasar
-  if (sensores.agentes[2] == 'i') c = 'P';
-  if (sensores.agentes[3] == 'i') d = 'P';
-
-  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, sensores.BelPosF, sensores.BelPosC);
-
-  if (pos == 2){
-    giros_consecutivos = 0;
-    return WALK;
-  }else if (pos == 1){
-    giros_consecutivos = 0;
-    return TURN_SL;
-  }else if (pos == 3){
-    giros_consecutivos = 0;
-    return TURN_SR;
-  }
-  
-  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
-  // Pasamos a explorar:
-
-  // Inicializamos la accion a IDLE 
-  Action accion = IDLE;
-
-  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
-
-  // Si podemos avanzar pero en frente tenemos al ingeniero, giraremos
-  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
-    puedo_avanzar = false; 
-  }
-  
-  if (puedo_avanzar){
-    accion = WALK;
-    giros_consecutivos = 0;
-  }
-  else{
-
-    // Vemos que casilla ha sido menos visitada si la izq o la derecha
-    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action;
-      // entonces realizamos el mismo giro que hicimos para completar el giro de 90º
-      giros_consecutivos++;
-    }
-    else{ 
-      giros_consecutivos++;
-      // observamos a la derecha y a la izquierda (90 grados)
-      int visitas_i = INT_MAX;
-      int visitas_d = INT_MAX;
-
-      // obtenemos ubicacion de casilla derecha e izquierda (90º)
-        ubicacion izq = actual;
-        izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
-        ubicacion casilla_i = Delante(izq);
-
-        ubicacion der = actual;
-        der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
-        ubicacion casilla_d = Delante(der);
-
-
-      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
-        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') visitas_i += 50;
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-      }
-
-      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
-        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') visitas_d += 50;
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-      }
-
-      // --- IMÁN DE UN SOLO USO PARA GIROS ---
-      // 1. Calculamos distancias e imán antes para poder juzgar el agua
-      int dist_actual = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
-      if (dist_actual <= 3 && sensores.BelPosF != -1) belkanita_encontrada = true;
-      bool usar_iman = !belkanita_encontrada && (sensores.BelPosF != -1);
-
-      int dist_i = (sensores.BelPosF != -1) ? abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC) : 0;
-      int dist_d = (sensores.BelPosF != -1) ? abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC) : 0;
-
-      // 2. Extraemos visitas de izquierda
-      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
-        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'H') visitas_i += 3;
-        if (mapaResultado[casilla_i.f][casilla_i.c] == 'A') {
-          if (usar_iman && dist_i < dist_actual) visitas_i += 1;
-          else visitas_i += 50;
-        }
-      }
-
-      // 3. Extraemos visitas de derecha
-      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
-        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'H') visitas_d += 3;
-        if (mapaResultado[casilla_d.f][casilla_d.c] == 'A') {
-          if (usar_iman && dist_d < dist_actual) visitas_d += 1;
-          else visitas_d += 50;
-        }
-      }
-
-      // 4. INSTINTO DIRECCIONAL PARA GIROS DE 90 GRADOS
-      if (visitas_d < visitas_i) {
-        accion = TURN_SR;
-      } else if (visitas_i < visitas_d) {
-        accion = TURN_SL;
-      } else {
-        if (usar_iman) {
-          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
-        } else {
-          accion = TURN_SR; 
-        }
-      }
-        
-      last_action = accion;
-    }
-  }
-
-
   // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
-  if (giros_consecutivos >= 8)
-    accion =  IDLE; 
+  if (giros_consecutivos >= 8) accion =  IDLE; 
 
   return accion; // WALK, TURN_SL, TURN_SR, IDLE
 }
-*/
-
-
-/*
-Action ComportamientoTecnico::AdaptadaComportamientoTecnicoNivel_1(Sensores sensores) {
-  // Usamos la misma lógica que en el 0 pero sin condición de parada cuando
-  // pasamos por T. Residuos.
-
-  // Inicializamos la matriz de mapas visitados
-  if (mapaVisitados.empty() && mapaResultado.size() > 0) {
-    mapaVisitados.assign(mapaResultado.size(), std::vector<int>(mapaResultado[0].size(), 0));
-  }
-
-  // actualizamos el mapa y la matriz de casillas visitadas
-  if (sensores.posF != -1) {
-    ActualizarMapa(sensores);
-    mapaVisitados[sensores.posF][sensores.posC]++;
-  }
-
-  // Obtenemos los datos de los sensores para observar si podemos avanzar
-  ubicacion actual = {sensores.posF, sensores.posC, sensores.rumbo};
-  ubicacion delante = Delante(actual);
-
-  // Actualizamos variable tengo_zapatillas
-  if (sensores.superficie[0] == 'D') {
-    tengo_zapatillas = true;
-  }
-
-  // Condicion de parada en T. Residuos eliminada
-
-  
-  // BUSQUEDA DE CASILLAS OBJETIVO:
-  // Buscamos si son viables las casillas a nuestra izquierda, centro y derecha
-  char i = ViablePorAltura(sensores.superficie[1], sensores.cota[1] - sensores.cota[0]);
-  char c = ViablePorAltura(sensores.superficie[2], sensores.cota[2] - sensores.cota[0]);
-  char d = ViablePorAltura(sensores.superficie[3], sensores.cota[3] - sensores.cota[0]);
-
-  // Comprobamos ademas que el ingeniero no esté en ninguna de las casillas
-  if (sensores.agentes[1] == 'i') i = 'P'; 
-  // si está, la 'marcamos' como precipicio para no pasar
-  if (sensores.agentes[2] == 'i') c = 'P';
-  if (sensores.agentes[3] == 'i') d = 'P';
-
-  // Evaluamos cual de las casillas es mas conveniente, 0 si ninguna 
-  int pos = VeoCasillaInteresanteNivel6(i, c, d, tengo_zapatillas, actual, sensores.BelPosF, sensores.BelPosC);
-
-  if (pos == 2){
-    giros_consecutivos = 0;
-    return WALK;
-  }else if (pos == 1){
-    giros_consecutivos = 0;
-    return TURN_SL;
-  }else if (pos == 3){
-    giros_consecutivos = 0;
-    return TURN_SR;
-  }
-  
-  // Si llegamos a este punto, pos == 0, luego no hay ningun objetivo delante
-  // Pasamos a explorar:
-
-  // Inicializamos la accion a IDLE 
-  Action accion = IDLE;
-
-  bool puedo_avanzar = (EsCasillaTransitableLevel6(delante.f, delante.c, tengo_zapatillas) && EsAccesiblePorAltura(actual) && !sensores.choque);
-
-  // Si podemos avanzar pero en frente tenemos al ingeniero, giraremos
-  if (puedo_avanzar && (sensores.agentes[2] == 'i')) {
-    puedo_avanzar = false; 
-  }
-  
-  if (puedo_avanzar){
-    accion = WALK;
-    giros_consecutivos = 0;
-  }
-  else{
-
-    // Vemos que casilla ha sido menos visitada si la izq o la derecha
-    if (giros_consecutivos%2 != 0){ // si no es el primer giro de 45 grados
-      accion = last_action;
-      // entonces realizamos el mismo giro que hicimos para completar el giro de 90º
-      giros_consecutivos++;
-    }
-    else{ 
-      giros_consecutivos++;
-      // observamos a la derecha y a la izquierda (90 grados)
-      int visitas_i = INT_MAX;
-      int visitas_d = INT_MAX;
-
-      // obtenemos ubicacion de casilla derecha e izquierda (90º)
-        ubicacion izq = actual;
-        izq.brujula = (Orientacion) (((int) actual.brujula + 6) % 8);
-        ubicacion casilla_i = Delante(izq);
-
-        ubicacion der = actual;
-        der.brujula = (Orientacion) (((int) actual.brujula + 2) % 8);
-        ubicacion casilla_d = Delante(der);
-
-
-      if (EsCasillaTransitableLevel6(casilla_i.f, casilla_i.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_i)){
-        visitas_i = mapaVisitados[casilla_i.f][casilla_i.c];
-      }
-
-      if (EsCasillaTransitableLevel6(casilla_d.f, casilla_d.c, tengo_zapatillas) && EsAccesiblePorAltura(actual, casilla_d)){
-        visitas_d = mapaVisitados[casilla_d.f][casilla_d.c];
-      }
-
-      if (visitas_d <= visitas_i)
-        accion = TURN_SR;
-      else
-        accion = TURN_SL;  // meter que sea atraido a la belkanita?
-      
-      // -----------------------------------------------------------
-      /*
-      // --- INSTINTO DIRECCIONAL CONDICIONADO PARA GIROS DE 90 GRADOS ---
-      if (visitas_d < visitas_i) {
-        accion = TURN_SR;
-      } else if (visitas_i < visitas_d) {
-        accion = TURN_SL;
-      } else {
-        int dist_actual = (sensores.BelPosF != -1) ? abs(actual.f - sensores.BelPosF) + abs(actual.c - sensores.BelPosC) : 0;
-        
-        int umbral_iman = 15;  // umbral de 15 para mapas pequeños
-        if (mapaResultado.size() > 30) {
-          umbral_iman = mapaResultado.size() / 3; // mapa size / 3 para mapas "grandes"
-        }
-        
-        if (dist_actual > umbral_iman && sensores.BelPosF != -1) {
-          int dist_i = abs(casilla_i.f - sensores.BelPosF) + abs(casilla_i.c - sensores.BelPosC);
-          int dist_d = abs(casilla_d.f - sensores.BelPosF) + abs(casilla_d.c - sensores.BelPosC);
-          accion = (dist_d <= dist_i) ? TURN_SR : TURN_SL;
-        } else {
-          accion = TURN_SR; 
-        }
-      }
-      
-      ----------------------------------------------------------
-        
-      last_action = accion;
-    }
-  }
-
-
-  // si llevamos 8 giros consecutivos (vuelta completa) entonces IDLE, porque estamos encerrados
-  if (giros_consecutivos >= 8)
-    accion =  IDLE; 
-
-  return accion; // WALK, TURN_SL, TURN_SR, IDLE
-}
-*/
 
 
 list<Action> AvanzaSaltosDeCaballo(){
@@ -1739,7 +935,7 @@ list<Action> ComportamientoTecnico::AlgoritmoAEstrella(const EstadoT &inicio, co
     }
 
     if (cerrada.find(current_node.estado) != cerrada.end()){  // Si ya estaba añadido
-        continue; // pasamos a la sig iteracion sin añadirlo
+      continue; // pasamos a la sig iteracion sin añadirlo
     }
     cerrada.insert(current_node.estado); // si no estaba añadido, lo añadimos y calculamos los hijos
 
