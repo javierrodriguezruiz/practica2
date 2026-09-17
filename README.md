@@ -1,5 +1,57 @@
 # Práctica 2 de *Inteligencia Artificial*, curso 2025/2026
 
+**SPANISH** — **Descripción:**  
+Este repositorio contiene mi solución a la práctica de agentes reactivos, deliberativos e híbridos de la asignatura de Inteligencia Artificial (UGR). El objetivo es controlar dos agentes autónomos — un **Ingeniero** y un **Técnico** — que cooperan en un entorno tipo grid (mundo "Belkan") para explorar el terreno, moverse de forma eficiente y construir una red de tuberías, bajo distintos niveles de observabilidad del mapa (desde percepción local por sensores hasta mapa completo conocido). Se han implementado Búsqueda en Anchura, Dijkstra y A* para resolver problemas de exploración, búsqueda de objetivos, planificación y coordinación entre agentes.
+
+**ENGLISH** — **Overview:**  
+This repository contains my solution for the reactive, deliberative and hybrid agents assignment of the Artificial Intelligence course (UGR). The goal is to control two autonomous agents — an **Engineer** and a **Technician** — that cooperate in a grid-based environment ("Belkan" world) to explore terrain, move efficiently, and build a pipeline network, across several levels of map observability (from local sensor-based perception to full map knowledge). I implemented Breadth-First Search, Dijkstra and A* to solve exploration, goal-search, planning and multi-agent coordination problems.
+
+## 🧠 Mi contribución (My Work)
+
+### SPANISH
+
+Implementé por completo la lógica de decisión de ambos agentes, en `Comportamientos_Agentes/ingeniero.{cpp,hpp}` y `Comportamientos_Agentes/tecnico.{cpp,hpp}`. Todo lo demás (motor de juego, interfaz gráfica, estructura base) fue proporcionado por el equipo docente.
+
+**Algoritmos de búsqueda implementados:**
+* 🔎 **Búsqueda en anchura (BFS)** — cálculo de caminos más cortos sobre un espacio de estados extendido (posición + orientación + inventario), usado en los niveles con reglas de movimiento simples.
+* 🧭 **Dijkstra** — caminos de coste mínimo cuando el coste de moverse entre casillas no es uniforme (terreno y desnivel).
+* ⭐ **A\* con heurísticas admisibles** (distancia de Chebyshev para movimiento en 8 direcciones), en tres variantes:
+  * Función de coste que modela energía real: distinto coste según tipo de terreno, penalización por subir desnivel, bonificación por bajar.
+  * A* con **restricción de paso obligatorio**: la meta solo se acepta si el camino ha pasado antes por un tipo de casilla concreto (estado aumentado, no solo posición).
+  * A* **multiobjetivo** aplicado al diseño de una red de tuberías, combinando longitud, coste energético e impacto ecológico tanto en la heurística como en el desempate de la cola de prioridad.
+* 🤖 **Agentes híbridos reactivo-deliberativos**: en los niveles con visión parcial (sensores locales), los agentes usan reglas reactivas y detección de bucles mientras construyen su modelo interno del mapa; en cuanto disponen de mapa completo, pasan a planificar con BFS/Dijkstra/A* antes de actuar.
+* 🤝 **Coordinación multiagente**: Ingeniero y Técnico son procesos de decisión independientes sincronizados mediante variables de estado compartido (turnos de espera, señales de "terreno preparado", modo construcción) — el Ingeniero planifica la red de tuberías y el Técnico ejecuta desplazamientos y construcción bajo demanda.
+
+### ENGLISH
+
+I fully implemented the decision-making logic of both agents, in `Comportamientos_Agentes/ingeniero.{cpp,hpp}` and `Comportamientos_Agentes/tecnico.{cpp,hpp}`. Everything else (game engine, graphical interface, base structure) was provided by the teaching team.
+
+**Search algorithms implemented:**
+* 🔎 **Breadth-First Search (BFS)** — shortest-path computation over an extended state space (position + orientation + inventory), used in the levels with simpler movement rules.
+* 🧭 **Dijkstra** — minimum-cost paths when the cost of moving between cells is non-uniform (terrain type and elevation changes).
+* ⭐ **A\* with admissible heuristics** (Chebyshev distance for 8-directional movement), in three variants:
+  * A cost function modeling real energy consumption: different costs per terrain type, penalty for climbing, bonus for descending.
+  * A* with a **mandatory waypoint constraint**: the goal is only accepted if the path has previously passed through a specific cell type (augmented state, not just position).
+  * **Multi-objective** A* applied to pipeline network design, combining length, energy cost and ecological impact both in the heuristic and in the priority-queue tie-breaking.
+* 🤖 **Hybrid reactive-deliberative agents**: in levels with partial vision (local sensors), agents rely on reactive rules and loop detection while building their internal map model; once the full map is known, they switch to planning with BFS/Dijkstra/A* before acting.
+* 🤝 **Multi-agent coordination**: Engineer and Technician are independent decision processes synchronized through shared state variables (waiting turns, "terrain ready" signals, construction mode) — the Engineer plans the pipeline network and the Technician executes movement and construction on demand.
+
+## 📚 Código Base (Base Code & Acknowledgments)
+
+**SPANISH** — El código base, el motor del juego/simulador y las instrucciones originales de despliegue fueron proporcionados por el equipo docente de la Universidad de Granada (UGR).
+
+**ENGLISH** — The base code, the game/simulator engine and the original deployment instructions were provided by the teaching team of the University of Granada (UGR).
+
+🔗 [ugr-ccia-IA/2026_practica2](https://github.com/ugr-ccia-IA/2026_practica2)
+
+
+
+
+
+
+
+--------------------------------------------------
+
 ## Prerrequisitos
 
 ### Crear una cuenta en [GitHub](https://github.com/). 
